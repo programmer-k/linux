@@ -400,6 +400,7 @@ __printf(1, 0) int vprintk_func(const char *fmt, va_list args)
 	/* No obstacles. */
 	return vprintk_default(fmt, args);
 }
+EXPORT_SYMBOL(vprintk);
 
 void __init printk_safe_init(void)
 {
