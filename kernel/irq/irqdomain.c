@@ -1898,15 +1898,16 @@ DEFINE_SHOW_ATTRIBUTE(irq_domain_debug);
 
 static void debugfs_add_domain_dir(struct irq_domain *d)
 {
-	if (!d->name || !domain_dir)
+	if (!d->name || !domain_dir || d->debugfs_file)
 		return;
-	debugfs_create_file(d->name, 0444, domain_dir, d,
-			    &irq_domain_debug_fops);
+	d->debugfs_file = debugfs_create_file(d->name, 0444, domain_dir, d,
+					      &irq_domain_debug_fops);
 }
 
 static void debugfs_remove_domain_dir(struct irq_domain *d)
 {
-	debugfs_remove(debugfs_lookup(d->name, domain_dir));
+	debugfs_remove(d->debugfs_file);
+	d->debugfs_file = NULL;
 }
 
 void __init irq_domain_debugfs_init(struct dentry *root)
