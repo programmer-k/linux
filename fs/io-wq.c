@@ -498,7 +498,7 @@ static int io_wqe_worker(void *data)
 	struct io_worker *worker = data;
 	struct io_wqe *wqe = worker->wqe;
 	struct io_wq *wq = wqe->wq;
-
+        signed long ret;
 	io_worker_start(worker);
 
 	while (!test_bit(IO_WQ_BIT_EXIT, &wq->state)) {
