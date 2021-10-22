@@ -1008,15 +1008,9 @@ void acpi_turn_off_unused_power_resources(void)
 
 		mutex_lock(&resource->resource_lock);
 
-		result = acpi_power_get_state(resource->device.handle, &state);
-		if (result) {
-			mutex_unlock(&resource->resource_lock);
-			continue;
-		}
-
-		if (state == ACPI_POWER_RESOURCE_STATE_ON
-		    && !resource->ref_count) {
-			dev_info(&resource->device.dev, "Turning OFF\n");
+		if (!resource->ref_count &&
+		    resource->state == ACPI_POWER_RESOURCE_STATE_ON) {
+			acpi_handle_debug(resource->device.handle, "Turning OFF\n");
 			__acpi_power_off(resource);
 		}
 
