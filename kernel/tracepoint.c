@@ -139,6 +139,7 @@ func_add(struct tracepoint_func **funcs, struct tracepoint_func *tp_func,
 	int nr_probes = 0;
 	int stub_funcs = 0;
 	int pos = -1;
+        int iter_probes;
 
 	if (WARN_ON(!tp_func->func))
 		return ERR_PTR(-EINVAL);
