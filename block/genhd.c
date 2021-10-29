@@ -206,11 +206,8 @@ struct block_device *disk_part_iter_next(struct disk_part_iter *piter)
 		if (!bdev_nr_sectors(part) &&
 		    !(piter->flags & DISK_PITER_INCL_EMPTY) &&
 		    !(piter->flags & DISK_PITER_INCL_EMPTY_PART0 &&
-		      piter->idx == 0)) {
-			bdput(piter->part);
-			piter->part = NULL;
+		      piter->idx == 0))
 			continue;
-		}
 
 		piter->part = bdgrab(part);
 		if (!piter->part)
