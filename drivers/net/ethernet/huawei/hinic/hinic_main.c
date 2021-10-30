@@ -1183,7 +1183,7 @@ static int nic_dev_init(struct pci_dev *pdev)
 	struct devlink *devlink;
 	int err, num_qps;
 
-	devlink = hinic_devlink_alloc(&pdev->dev);
+	devlink = hinic_devlink_alloc();
 	if (!devlink) {
 		dev_err(&pdev->dev, "Hinic devlink alloc failed\n");
 		return -ENOMEM;
@@ -1392,13 +1392,25 @@ static int hinic_probe(struct pci_dev *pdev,
 
 	pci_set_master(pdev);
 
-	err = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
+	err = pci_set_dma_mask(pdev, DMA_BIT_MASK(64));
 	if (err) {
 		dev_warn(&pdev->dev, "Couldn't set 64-bit DMA mask\n");
-		err = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
+		err = pci_set_dma_mask(pdev, DMA_BIT_MASK(32));
 		if (err) {
 			dev_err(&pdev->dev, "Failed to set DMA mask\n");
 			goto err_dma_mask;
+		}
+	}
+
+	err = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(64));
+	if (err) {
+		dev_warn(&pdev->dev,
+			 "Couldn't set 64-bit consistent DMA mask\n");
+		err = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32));
+		if (err) {
+			dev_err(&pdev->dev,
+				"Failed to set consistent DMA mask\n");
+			goto err_dma_consistent_mask;
 		}
 	}
 
@@ -1412,6 +1424,7 @@ static int hinic_probe(struct pci_dev *pdev,
 	return 0;
 
 err_nic_dev_init:
+err_dma_consistent_mask:
 err_dma_mask:
 	pci_release_regions(pdev);
 

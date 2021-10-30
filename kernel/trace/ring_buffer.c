@@ -2111,7 +2111,7 @@ int ring_buffer_resize(struct trace_buffer *buffer, unsigned long size,
 			}
 		}
 
-		cpus_read_lock();
+		get_online_cpus();
 		/*
 		 * Fire off all the required work handlers
 		 * We can't schedule on offline CPUs, but it's not necessary
@@ -2143,7 +2143,7 @@ int ring_buffer_resize(struct trace_buffer *buffer, unsigned long size,
 			cpu_buffer->nr_pages_to_update = 0;
 		}
 
-		cpus_read_unlock();
+		put_online_cpus();
 	} else {
 		cpu_buffer = buffer->buffers[cpu_id];
 
@@ -2171,7 +2171,7 @@ int ring_buffer_resize(struct trace_buffer *buffer, unsigned long size,
 			goto out_err;
 		}
 
-		cpus_read_lock();
+		get_online_cpus();
 
 		/* Can't run something on an offline CPU. */
 		if (!cpu_online(cpu_id))
@@ -2183,7 +2183,7 @@ int ring_buffer_resize(struct trace_buffer *buffer, unsigned long size,
 		}
 
 		cpu_buffer->nr_pages_to_update = 0;
-		cpus_read_unlock();
+		put_online_cpus();
 	}
 
  out:

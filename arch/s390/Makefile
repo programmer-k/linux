@@ -70,7 +70,7 @@ cflags-y += -Wa,-I$(srctree)/arch/$(ARCH)/include
 #
 cflags-$(CONFIG_FRAME_POINTER) += -fno-optimize-sibling-calls
 
-ifneq ($(call cc-option,-mpacked-stack -mbackchain -msoft-float),)
+ifeq ($(call cc-option-yn,-mpacked-stack -mbackchain -msoft-float),y)
 cflags-$(CONFIG_PACK_STACK)  += -mpacked-stack -D__PACK_STACK
 aflags-$(CONFIG_PACK_STACK)  += -D__PACK_STACK
 endif
@@ -78,15 +78,22 @@ endif
 KBUILD_AFLAGS_DECOMPRESSOR += $(aflags-y)
 KBUILD_CFLAGS_DECOMPRESSOR += $(cflags-y)
 
-ifneq ($(call cc-option,-mstack-size=8192 -mstack-guard=128),)
+ifeq ($(call cc-option-yn,-mstack-size=8192 -mstack-guard=128),y)
 cflags-$(CONFIG_CHECK_STACK) += -mstack-size=$(STACK_SIZE)
-ifeq ($(call cc-option,-mstack-size=8192),)
+ifneq ($(call cc-option-yn,-mstack-size=8192),y)
 cflags-$(CONFIG_CHECK_STACK) += -mstack-guard=$(CONFIG_STACK_GUARD)
 endif
 endif
 
+ifdef CONFIG_WARN_DYNAMIC_STACK
+  ifeq ($(call cc-option-yn,-mwarn-dynamicstack),y)
+    KBUILD_CFLAGS += -mwarn-dynamicstack
+    KBUILD_CFLAGS_DECOMPRESSOR += -mwarn-dynamicstack
+  endif
+endif
+
 ifdef CONFIG_EXPOLINE
-  ifneq ($(call cc-option,$(CC_FLAGS_MARCH) -mindirect-branch=thunk),)
+  ifeq ($(call cc-option-yn,$(CC_FLAGS_MARCH) -mindirect-branch=thunk),y)
     CC_FLAGS_EXPOLINE := -mindirect-branch=thunk
     CC_FLAGS_EXPOLINE += -mfunction-return=thunk
     CC_FLAGS_EXPOLINE += -mindirect-branch-table
@@ -97,10 +104,10 @@ ifdef CONFIG_EXPOLINE
 endif
 
 ifdef CONFIG_FUNCTION_TRACER
-  ifeq ($(call cc-option,-mfentry -mnop-mcount),)
+  ifeq ($(call cc-option-yn,-mfentry -mnop-mcount),n)
     # make use of hotpatch feature if the compiler supports it
     cc_hotpatch	:= -mhotpatch=0,3
-    ifneq ($(call cc-option,$(cc_hotpatch)),)
+    ifeq ($(call cc-option-yn,$(cc_hotpatch)),y)
       CC_FLAGS_FTRACE := $(cc_hotpatch)
       KBUILD_AFLAGS	+= -DCC_USING_HOTPATCH
       KBUILD_CFLAGS	+= -DCC_USING_HOTPATCH
@@ -135,8 +142,7 @@ all: bzImage
 KBUILD_IMAGE	:= $(boot)/bzImage
 
 install:
-	sh -x $(srctree)/$(boot)/install.sh $(KERNELRELEASE) $(KBUILD_IMAGE) \
-	      System.map "$(INSTALL_PATH)"
+	$(Q)$(MAKE) $(build)=$(boot) $@
 
 bzImage: vmlinux
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@

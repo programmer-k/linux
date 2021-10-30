@@ -178,7 +178,6 @@ enum cdns_i2c_slave_state {
  * @clk:		Pointer to struct clk
  * @clk_rate_change_nb:	Notifier block for clock rate changes
  * @quirks:		flag for broken hold bit usage in r1p10
- * @ctrl_reg:		Cached value of the control register.
  * @ctrl_reg_diva_divb: value of fields DIV_A and DIV_B from CR register
  * @slave:		Registered slave instance.
  * @dev_mode:		I2C operating role(master/slave).
@@ -203,7 +202,6 @@ struct cdns_i2c {
 	struct clk *clk;
 	struct notifier_block clk_rate_change_nb;
 	u32 quirks;
-	u32 ctrl_reg;
 #if IS_ENABLED(CONFIG_I2C_SLAVE)
 	u16 ctrl_reg_diva_divb;
 	struct i2c_client *slave;
@@ -1073,11 +1071,10 @@ static int cdns_i2c_setclk(unsigned long clk_in, struct cdns_i2c *id)
 	if (ret)
 		return ret;
 
-	ctrl_reg = id->ctrl_reg;
+	ctrl_reg = cdns_i2c_readreg(CDNS_I2C_CR_OFFSET);
 	ctrl_reg &= ~(CDNS_I2C_CR_DIVA_MASK | CDNS_I2C_CR_DIVB_MASK);
 	ctrl_reg |= ((div_a << CDNS_I2C_CR_DIVA_SHIFT) |
 			(div_b << CDNS_I2C_CR_DIVB_SHIFT));
-	id->ctrl_reg = ctrl_reg;
 	cdns_i2c_writereg(ctrl_reg, CDNS_I2C_CR_OFFSET);
 #if IS_ENABLED(CONFIG_I2C_SLAVE)
 	id->ctrl_reg_diva_divb = ctrl_reg & (CDNS_I2C_CR_DIVA_MASK |
@@ -1166,26 +1163,6 @@ static int __maybe_unused cdns_i2c_runtime_suspend(struct device *dev)
 }
 
 /**
- * cdns_i2c_init -  Controller initialisation
- * @id:		Device private data structure
- *
- * Initialise the i2c controller.
- *
- */
-static void cdns_i2c_init(struct cdns_i2c *id)
-{
-	cdns_i2c_writereg(id->ctrl_reg, CDNS_I2C_CR_OFFSET);
-	/*
-	 * Cadence I2C controller has a bug wherein it generates
-	 * invalid read transaction after HW timeout in master receiver mode.
-	 * HW timeout is not used by this driver and the interrupt is disabled.
-	 * But the feature itself cannot be disabled. Hence maximum value
-	 * is written to this register to reduce the chances of error.
-	 */
-	cdns_i2c_writereg(CDNS_I2C_TIMEOUT_MAX, CDNS_I2C_TIME_OUT_OFFSET);
-}
-
-/**
  * cdns_i2c_runtime_resume - Runtime resume
  * @dev:	Address of the platform_device structure
  *
@@ -1203,7 +1180,6 @@ static int __maybe_unused cdns_i2c_runtime_resume(struct device *dev)
 		dev_err(dev, "Cannot enable clock.\n");
 		return ret;
 	}
-	cdns_i2c_init(xi2c);
 
 	return 0;
 }
@@ -1303,7 +1279,7 @@ static int cdns_i2c_probe(struct platform_device *pdev)
 	id->dev_mode = CDNS_I2C_MODE_MASTER;
 	id->slave_state = CDNS_I2C_SLAVE_STATE_IDLE;
 #endif
-	id->ctrl_reg = CDNS_I2C_CR_ACK_EN | CDNS_I2C_CR_NEA | CDNS_I2C_CR_MS;
+	cdns_i2c_writereg(CDNS_I2C_CR_MASTER_EN_MASK, CDNS_I2C_CR_OFFSET);
 
 	ret = cdns_i2c_setclk(id->input_clk, id);
 	if (ret) {
@@ -1318,7 +1294,15 @@ static int cdns_i2c_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "cannot get irq %d\n", id->irq);
 		goto err_clk_dis;
 	}
-	cdns_i2c_init(id);
+
+	/*
+	 * Cadence I2C controller has a bug wherein it generates
+	 * invalid read transaction after HW timeout in master receiver mode.
+	 * HW timeout is not used by this driver and the interrupt is disabled.
+	 * But the feature itself cannot be disabled. Hence maximum value
+	 * is written to this register to reduce the chances of error.
+	 */
+	cdns_i2c_writereg(CDNS_I2C_TIMEOUT_MAX, CDNS_I2C_TIME_OUT_OFFSET);
 
 	ret = i2c_add_adapter(&id->adap);
 	if (ret < 0)

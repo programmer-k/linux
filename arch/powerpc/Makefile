@@ -122,7 +122,6 @@ endif
 
 LDFLAGS_vmlinux-y := -Bstatic
 LDFLAGS_vmlinux-$(CONFIG_RELOCATABLE) := -pie
-LDFLAGS_vmlinux-$(CONFIG_RELOCATABLE) += -z notext
 LDFLAGS_vmlinux	:= $(LDFLAGS_vmlinux-y)
 
 ifdef CONFIG_PPC64
@@ -408,8 +407,7 @@ endef
 
 PHONY += install
 install:
-	sh -x $(srctree)/$(boot)/install.sh "$(KERNELRELEASE)" vmlinux \
-	System.map "$(INSTALL_PATH)"
+	$(Q)$(MAKE) $(build)=$(boot) install
 
 archclean:
 	$(Q)$(MAKE) $(clean)=$(boot)

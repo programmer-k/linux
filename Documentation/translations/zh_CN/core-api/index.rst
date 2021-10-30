@@ -1,12 +1,10 @@
 .. include:: ../disclaimer-zh_CN.rst
 
-:Original: Documentation/core-api/index.rst
-
-:翻译:
-
- 司延腾 Yanteng Si <siyanteng@loongson.cn>
+:Original: :doc:`../../../core-api/irq/index`
+:Translator: Yanteng Si <siyanteng@loongson.cn>
 
 .. _cn_core-api_index.rst:
+
 
 ===========
 核心API文档
@@ -82,17 +80,14 @@ Todolist:
    :maxdepth: 1
 
    cachetlb
-   cpu_hotplug
-   genericirq
-   memory-hotplug
-   protection-keys
 
 Todolist:
 
 
-   memory-hotplug
    cpu_hotplug
+   memory-hotplug
    genericirq
+   protection-keys
 
 
 内存管理

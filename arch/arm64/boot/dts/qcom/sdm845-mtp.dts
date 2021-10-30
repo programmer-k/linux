@@ -413,9 +413,6 @@
 
 	qcom,dual-dsi-mode;
 
-	/* DSI1 is slave, so use DSI0 clocks */
-	assigned-clock-parents = <&dsi0_phy 0>, <&dsi0_phy 1>;
-
 	ports {
 		port@1 {
 			endpoint {

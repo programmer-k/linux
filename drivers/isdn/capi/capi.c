@@ -1269,11 +1269,10 @@ static int __init capinc_tty_init(void)
 	if (!capiminors)
 		return -ENOMEM;
 
-	drv = tty_alloc_driver(capi_ttyminors, TTY_DRIVER_REAL_RAW |
-			TTY_DRIVER_RESET_TERMIOS | TTY_DRIVER_DYNAMIC_DEV);
-	if (IS_ERR(drv)) {
+	drv = alloc_tty_driver(capi_ttyminors);
+	if (!drv) {
 		kfree(capiminors);
-		return PTR_ERR(drv);
+		return -ENOMEM;
 	}
 	drv->driver_name = "capi_nc";
 	drv->name = "capi!";
@@ -1286,11 +1285,14 @@ static int __init capinc_tty_init(void)
 	drv->init_termios.c_oflag = OPOST | ONLCR;
 	drv->init_termios.c_cflag = B9600 | CS8 | CREAD | HUPCL | CLOCAL;
 	drv->init_termios.c_lflag = 0;
+	drv->flags =
+		TTY_DRIVER_REAL_RAW | TTY_DRIVER_RESET_TERMIOS |
+		TTY_DRIVER_DYNAMIC_DEV;
 	tty_set_operations(drv, &capinc_ops);
 
 	err = tty_register_driver(drv);
 	if (err) {
-		tty_driver_kref_put(drv);
+		put_tty_driver(drv);
 		kfree(capiminors);
 		printk(KERN_ERR "Couldn't register capi_nc driver\n");
 		return err;
@@ -1302,7 +1304,7 @@ static int __init capinc_tty_init(void)
 static void __exit capinc_tty_exit(void)
 {
 	tty_unregister_driver(capinc_tty_driver);
-	tty_driver_kref_put(capinc_tty_driver);
+	put_tty_driver(capinc_tty_driver);
 	kfree(capiminors);
 }
 

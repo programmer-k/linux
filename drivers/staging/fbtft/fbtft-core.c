@@ -992,7 +992,9 @@ out_free:
 int fbtft_init_display(struct fbtft_par *par)
 {
 	int buf[64];
-	int i;
+	char msg[128];
+	char str[16];
+	int i = 0;
 	int j;
 
 	/* sanity check */
@@ -1003,11 +1005,9 @@ int fbtft_init_display(struct fbtft_par *par)
 	}
 
 	/* make sure stop marker exists */
-	for (i = 0; i < FBTFT_MAX_INIT_SEQUENCE; i++) {
+	for (i = 0; i < FBTFT_MAX_INIT_SEQUENCE; i++)
 		if (par->init_sequence[i] == -3)
 			break;
-	}
-
 	if (i == FBTFT_MAX_INIT_SEQUENCE) {
 		dev_err(par->info->device,
 			"missing stop marker at end of init sequence\n");
@@ -1036,14 +1036,17 @@ int fbtft_init_display(struct fbtft_par *par)
 		switch (par->init_sequence[i]) {
 		case -1:
 			i++;
-
 			/* make debug message */
-			for (j = 0; par->init_sequence[i + 1 + j] >= 0; j++);
-
+			strcpy(msg, "");
+			j = i + 1;
+			while (par->init_sequence[j] >= 0) {
+				sprintf(str, "0x%02X ", par->init_sequence[j]);
+				strcat(msg, str);
+				j++;
+			}
 			fbtft_par_dbg(DEBUG_INIT_DISPLAY, par,
-				      "init: write(0x%02X) %*ph\n",
-				      par->init_sequence[i], j,
-				      &par->init_sequence[i + 1]);
+				      "init: write(0x%02X) %s\n",
+				      par->init_sequence[i], msg);
 
 			/* Write */
 			j = 0;

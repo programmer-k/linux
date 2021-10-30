@@ -306,12 +306,12 @@ void clocksource_verify_percpu(struct clocksource *cs)
 		return;
 	cpumask_clear(&cpus_ahead);
 	cpumask_clear(&cpus_behind);
-	cpus_read_lock();
+	get_online_cpus();
 	preempt_disable();
 	clocksource_verify_choose_cpus();
 	if (cpumask_weight(&cpus_chosen) == 0) {
 		preempt_enable();
-		cpus_read_unlock();
+		put_online_cpus();
 		pr_warn("Not enough CPUs to check clocksource '%s'.\n", cs->name);
 		return;
 	}
@@ -337,7 +337,7 @@ void clocksource_verify_percpu(struct clocksource *cs)
 			cs_nsec_min = cs_nsec;
 	}
 	preempt_enable();
-	cpus_read_unlock();
+	put_online_cpus();
 	if (!cpumask_empty(&cpus_ahead))
 		pr_warn("        CPUs %*pbl ahead of CPU %d for clocksource %s.\n",
 			cpumask_pr_args(&cpus_ahead), testcpu, cs->name);

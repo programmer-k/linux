@@ -2437,7 +2437,7 @@ static int resize_chunks(struct r5conf *conf, int new_disks, int new_sectors)
 	    conf->scribble_sectors >= new_sectors)
 		return 0;
 	mddev_suspend(conf->mddev);
-	cpus_read_lock();
+	get_online_cpus();
 
 	for_each_present_cpu(cpu) {
 		struct raid5_percpu *percpu;
@@ -2449,7 +2449,7 @@ static int resize_chunks(struct r5conf *conf, int new_disks, int new_sectors)
 			break;
 	}
 
-	cpus_read_unlock();
+	put_online_cpus();
 	mddev_resume(conf->mddev);
 	if (!err) {
 		conf->scribble_disks = new_disks;

@@ -15,6 +15,7 @@
 #include <sound/sof.h>
 #include "../ops.h"
 #include "atom.h"
+#include "shim.h"
 #include "../sof-pci-dev.h"
 #include "../sof-audio.h"
 

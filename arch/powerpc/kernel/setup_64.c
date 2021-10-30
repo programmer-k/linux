@@ -32,6 +32,7 @@
 #include <linux/nmi.h>
 #include <linux/pgtable.h>
 
+#include <asm/debugfs.h>
 #include <asm/kvm_guest.h>
 #include <asm/io.h>
 #include <asm/kdump.h>

@@ -109,9 +109,11 @@ void optc3_lock(struct timing_generator *optc)
 	REG_SET(OTG_MASTER_UPDATE_LOCK, 0,
 		OTG_MASTER_UPDATE_LOCK, 1);
 
-	REG_WAIT(OTG_MASTER_UPDATE_LOCK,
-			UPDATE_LOCK_STATUS, 1,
-			1, 10);
+	/* Should be fast, status does not update on maximus */
+	if (optc->ctx->dce_environment != DCE_ENV_FPGA_MAXIMUS)
+		REG_WAIT(OTG_MASTER_UPDATE_LOCK,
+				UPDATE_LOCK_STATUS, 1,
+				1, 10);
 }
 
 void optc3_set_out_mux(struct timing_generator *optc, enum otg_out_mux_dest dest)

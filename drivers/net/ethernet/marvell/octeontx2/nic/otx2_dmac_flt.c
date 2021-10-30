@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
-/* Marvell RVU Ethernet driver
+/* Marvell OcteonTx2 RVU Physcial Function ethernet driver
  *
  * Copyright (C) 2021 Marvell.
- *
  */
 
 #include "otx2_common.h"

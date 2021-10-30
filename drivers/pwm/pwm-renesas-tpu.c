@@ -425,12 +425,13 @@ static int tpu_probe(struct platform_device *pdev)
 static int tpu_remove(struct platform_device *pdev)
 {
 	struct tpu_device *tpu = platform_get_drvdata(pdev);
+	int ret;
 
-	pwmchip_remove(&tpu->chip);
+	ret = pwmchip_remove(&tpu->chip);
 
 	pm_runtime_disable(&pdev->dev);
 
-	return 0;
+	return ret;
 }
 
 #ifdef CONFIG_OF

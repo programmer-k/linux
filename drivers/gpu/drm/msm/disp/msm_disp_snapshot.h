@@ -16,6 +16,7 @@
 #include <linux/delay.h>
 #include <linux/spinlock.h>
 #include <linux/ktime.h>
+#include <linux/debugfs.h>
 #include <linux/uaccess.h>
 #include <linux/dma-buf.h>
 #include <linux/slab.h>
@@ -24,6 +25,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/kthread.h>
 #include <linux/devcoredump.h>
+#include <stdarg.h>
 #include "msm_kms.h"
 
 #define MSM_DISP_SNAPSHOT_MAX_BLKS		10

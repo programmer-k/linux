@@ -1180,10 +1180,8 @@ static int rockchip_usb2phy_probe(struct platform_device *pdev)
 
 next_child:
 		/* to prevent out of boundary */
-		if (++index >= rphy->phy_cfg->num_ports) {
-			of_node_put(child_np);
+		if (++index >= rphy->phy_cfg->num_ports)
 			break;
-		}
 	}
 
 	provider = devm_of_phy_provider_register(dev, of_phy_simple_xlate);

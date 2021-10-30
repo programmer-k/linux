@@ -649,9 +649,7 @@ static int alpha_pci_map_sg(struct device *dev, struct scatterlist *sg,
 		sg->dma_address
 		  = pci_map_single_1(pdev, SG_ENT_VIRT_ADDRESS(sg),
 				     sg->length, dac_allowed);
-		if (sg->dma_address == DMA_MAPPING_ERROR)
-			return -EIO;
-		return 1;
+		return sg->dma_address != DMA_MAPPING_ERROR;
 	}
 
 	start = sg;
@@ -687,10 +685,8 @@ static int alpha_pci_map_sg(struct device *dev, struct scatterlist *sg,
 	if (out < end)
 		out->dma_length = 0;
 
-	if (out - start == 0) {
+	if (out - start == 0)
 		printk(KERN_WARNING "pci_map_sg failed: no entries?\n");
-		return -ENOMEM;
-	}
 	DBGA("pci_map_sg: %ld entries\n", out - start);
 
 	return out - start;
@@ -703,7 +699,7 @@ static int alpha_pci_map_sg(struct device *dev, struct scatterlist *sg,
 	   entries.  Unmap them now.  */
 	if (out > start)
 		pci_unmap_sg(pdev, start, out - start, dir);
-	return -ENOMEM;
+	return 0;
 }
 
 /* Unmap a set of streaming mode DMA translations.  Again, cpu read

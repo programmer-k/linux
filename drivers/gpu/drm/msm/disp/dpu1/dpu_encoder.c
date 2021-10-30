@@ -274,20 +274,20 @@ int dpu_encoder_helper_wait_for_irq(struct dpu_encoder_phys *phys_enc,
 
 	/* return EWOULDBLOCK since we know the wait isn't necessary */
 	if (phys_enc->enable_state == DPU_ENC_DISABLED) {
-		DRM_ERROR("encoder is disabled id=%u, intr=%d, irq=%d\n",
+		DRM_ERROR("encoder is disabled id=%u, intr=%d, irq=%d",
 			  DRMID(phys_enc->parent), intr_idx,
 			  irq->irq_idx);
 		return -EWOULDBLOCK;
 	}
 
 	if (irq->irq_idx < 0) {
-		DRM_DEBUG_KMS("skip irq wait id=%u, intr=%d, irq=%s\n",
+		DRM_DEBUG_KMS("skip irq wait id=%u, intr=%d, irq=%s",
 			      DRMID(phys_enc->parent), intr_idx,
 			      irq->name);
 		return 0;
 	}
 
-	DRM_DEBUG_KMS("id=%u, intr=%d, irq=%d, pp=%d, pending_cnt=%d\n",
+	DRM_DEBUG_KMS("id=%u, intr=%d, irq=%d, pp=%d, pending_cnt=%d",
 		      DRMID(phys_enc->parent), intr_idx,
 		      irq->irq_idx, phys_enc->hw_pp->idx - PINGPONG_0,
 		      atomic_read(wait_info->atomic_cnt));
@@ -303,7 +303,8 @@ int dpu_encoder_helper_wait_for_irq(struct dpu_encoder_phys *phys_enc,
 		if (irq_status) {
 			unsigned long flags;
 
-			DRM_DEBUG_KMS("irq not triggered id=%u, intr=%d, irq=%d, pp=%d, atomic_cnt=%d\n",
+			DRM_DEBUG_KMS("irq not triggered id=%u, intr=%d, "
+				      "irq=%d, pp=%d, atomic_cnt=%d",
 				      DRMID(phys_enc->parent), intr_idx,
 				      irq->irq_idx,
 				      phys_enc->hw_pp->idx - PINGPONG_0,
@@ -314,7 +315,8 @@ int dpu_encoder_helper_wait_for_irq(struct dpu_encoder_phys *phys_enc,
 			ret = 0;
 		} else {
 			ret = -ETIMEDOUT;
-			DRM_DEBUG_KMS("irq timeout id=%u, intr=%d, irq=%d, pp=%d, atomic_cnt=%d\n",
+			DRM_DEBUG_KMS("irq timeout id=%u, intr=%d, "
+				      "irq=%d, pp=%d, atomic_cnt=%d",
 				      DRMID(phys_enc->parent), intr_idx,
 				      irq->irq_idx,
 				      phys_enc->hw_pp->idx - PINGPONG_0,

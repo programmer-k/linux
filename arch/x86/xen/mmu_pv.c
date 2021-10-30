@@ -1518,17 +1518,14 @@ static inline void xen_alloc_ptpage(struct mm_struct *mm, unsigned long pfn,
 	if (pinned) {
 		struct page *page = pfn_to_page(pfn);
 
-		pinned = false;
-		if (static_branch_likely(&xen_struct_pages_ready)) {
-			pinned = PagePinned(page);
+		if (static_branch_likely(&xen_struct_pages_ready))
 			SetPagePinned(page);
-		}
 
 		xen_mc_batch();
 
 		__set_pfn_prot(pfn, PAGE_KERNEL_RO);
 
-		if (level == PT_PTE && USE_SPLIT_PTE_PTLOCKS && !pinned)
+		if (level == PT_PTE && USE_SPLIT_PTE_PTLOCKS)
 			__pin_pagetable_pfn(MMUEXT_PIN_L1_TABLE, pfn);
 
 		xen_mc_issue(PARAVIRT_LAZY_MMU);
@@ -2102,8 +2099,8 @@ static const struct pv_mmu_ops xen_mmu_ops __initconst = {
 	.set_pte = xen_set_pte_init,
 	.set_pmd = xen_set_pmd_hyper,
 
-	.ptep_modify_prot_start = xen_ptep_modify_prot_start,
-	.ptep_modify_prot_commit = xen_ptep_modify_prot_commit,
+	.ptep_modify_prot_start = __ptep_modify_prot_start,
+	.ptep_modify_prot_commit = __ptep_modify_prot_commit,
 
 	.pte_val = PV_CALLEE_SAVE(xen_pte_val),
 	.pgd_val = PV_CALLEE_SAVE(xen_pgd_val),
@@ -2398,7 +2395,7 @@ static int remap_area_pfn_pte_fn(pte_t *ptep, unsigned long addr, void *data)
 
 int xen_remap_pfn(struct vm_area_struct *vma, unsigned long addr,
 		  xen_pfn_t *pfn, int nr, int *err_ptr, pgprot_t prot,
-		  unsigned int domid, bool no_translate)
+		  unsigned int domid, bool no_translate, struct page **pages)
 {
 	int err = 0;
 	struct remap_data rmd;

@@ -81,8 +81,6 @@ static struct phy_driver mtk_gephy_driver[] = {
 		 */
 		.config_intr	= genphy_no_config_intr,
 		.handle_interrupt = genphy_handle_interrupt_no_ack,
-		.suspend	= genphy_suspend,
-		.resume		= genphy_resume,
 		.read_page	= mtk_gephy_read_page,
 		.write_page	= mtk_gephy_write_page,
 	},
@@ -95,8 +93,6 @@ static struct phy_driver mtk_gephy_driver[] = {
 		 */
 		.config_intr	= genphy_no_config_intr,
 		.handle_interrupt = genphy_handle_interrupt_no_ack,
-		.suspend	= genphy_suspend,
-		.resume		= genphy_resume,
 		.read_page	= mtk_gephy_read_page,
 		.write_page	= mtk_gephy_write_page,
 	},

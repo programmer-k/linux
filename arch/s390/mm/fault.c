@@ -31,7 +31,6 @@
 #include <linux/kprobes.h>
 #include <linux/uaccess.h>
 #include <linux/hugetlb.h>
-#include <linux/kfence.h>
 #include <asm/asm-offsets.h>
 #include <asm/diag.h>
 #include <asm/gmap.h>
@@ -231,8 +230,8 @@ const struct exception_table_entry *s390_search_extables(unsigned long addr)
 {
 	const struct exception_table_entry *fixup;
 
-	fixup = search_extable(__start_amode31_ex_table,
-			       __stop_amode31_ex_table - __start_amode31_ex_table,
+	fixup = search_extable(__start_dma_ex_table,
+			       __stop_dma_ex_table - __start_dma_ex_table,
 			       addr);
 	if (!fixup)
 		fixup = search_exception_tables(addr);
@@ -357,7 +356,6 @@ static inline vm_fault_t do_exception(struct pt_regs *regs, int access)
 	unsigned long address;
 	unsigned int flags;
 	vm_fault_t fault;
-	bool is_write;
 
 	tsk = current;
 	/*
@@ -371,8 +369,6 @@ static inline vm_fault_t do_exception(struct pt_regs *regs, int access)
 
 	mm = tsk->mm;
 	trans_exc_code = regs->int_parm_long;
-	address = trans_exc_code & __FAIL_ADDR_MASK;
-	is_write = (trans_exc_code & store_indication) == 0x400;
 
 	/*
 	 * Verify that the fault happened in user space, that
@@ -383,8 +379,6 @@ static inline vm_fault_t do_exception(struct pt_regs *regs, int access)
 	type = get_fault_type(regs);
 	switch (type) {
 	case KERNEL_FAULT:
-		if (kfence_handle_page_fault(address, is_write, regs))
-			return 0;
 		goto out;
 	case USER_FAULT:
 	case GMAP_FAULT:
@@ -393,11 +387,12 @@ static inline vm_fault_t do_exception(struct pt_regs *regs, int access)
 		break;
 	}
 
+	address = trans_exc_code & __FAIL_ADDR_MASK;
 	perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, address);
 	flags = FAULT_FLAG_DEFAULT;
 	if (user_mode(regs))
 		flags |= FAULT_FLAG_USER;
-	if (access == VM_WRITE || is_write)
+	if (access == VM_WRITE || (trans_exc_code & store_indication) == 0x400)
 		flags |= FAULT_FLAG_WRITE;
 	mmap_read_lock(mm);
 

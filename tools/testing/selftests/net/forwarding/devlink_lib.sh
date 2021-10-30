@@ -1,9 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0
 
-# Kselftest framework requirement - SKIP code is 4.
-ksft_skip=4
-
 ##############################################################################
 # Defines
 
@@ -12,11 +9,11 @@ if [[ ! -v DEVLINK_DEV ]]; then
 			     | jq -r '.port | keys[]' | cut -d/ -f-2)
 	if [ -z "$DEVLINK_DEV" ]; then
 		echo "SKIP: ${NETIFS[p1]} has no devlink device registered for it"
-		exit $ksft_skip
+		exit 1
 	fi
 	if [[ "$(echo $DEVLINK_DEV | grep -c pci)" -eq 0 ]]; then
 		echo "SKIP: devlink device's bus is not PCI"
-		exit $ksft_skip
+		exit 1
 	fi
 
 	DEVLINK_VIDDID=$(lspci -s $(echo $DEVLINK_DEV | cut -d"/" -f2) \
@@ -25,7 +22,7 @@ elif [[ ! -z "$DEVLINK_DEV" ]]; then
 	devlink dev show $DEVLINK_DEV &> /dev/null
 	if [ $? -ne 0 ]; then
 		echo "SKIP: devlink device \"$DEVLINK_DEV\" not found"
-		exit $ksft_skip
+		exit 1
 	fi
 fi
 
@@ -35,19 +32,19 @@ fi
 devlink help 2>&1 | grep resource &> /dev/null
 if [ $? -ne 0 ]; then
 	echo "SKIP: iproute2 too old, missing devlink resource support"
-	exit $ksft_skip
+	exit 1
 fi
 
 devlink help 2>&1 | grep trap &> /dev/null
 if [ $? -ne 0 ]; then
 	echo "SKIP: iproute2 too old, missing devlink trap support"
-	exit $ksft_skip
+	exit 1
 fi
 
 devlink dev help 2>&1 | grep info &> /dev/null
 if [ $? -ne 0 ]; then
 	echo "SKIP: iproute2 too old, missing devlink dev info support"
-	exit $ksft_skip
+	exit 1
 fi
 
 ##############################################################################

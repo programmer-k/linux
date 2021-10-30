@@ -200,6 +200,8 @@ examples:
         clock-names = "pclk", "wrap", "phy", "axi";
         power-domains = <&mipi_pd>;
 
+        status = "disabled";
+
         ports {
             #address-cells = <1>;
             #size-cells = <0>;

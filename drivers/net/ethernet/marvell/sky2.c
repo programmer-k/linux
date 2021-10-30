@@ -4052,9 +4052,7 @@ static int sky2_set_pauseparam(struct net_device *dev,
 }
 
 static int sky2_get_coalesce(struct net_device *dev,
-			     struct ethtool_coalesce *ecmd,
-			     struct kernel_ethtool_coalesce *kernel_coal,
-			     struct netlink_ext_ack *extack)
+			     struct ethtool_coalesce *ecmd)
 {
 	struct sky2_port *sky2 = netdev_priv(dev);
 	struct sky2_hw *hw = sky2->hw;
@@ -4089,9 +4087,7 @@ static int sky2_get_coalesce(struct net_device *dev,
 
 /* Note: this affect both ports */
 static int sky2_set_coalesce(struct net_device *dev,
-			     struct ethtool_coalesce *ecmd,
-			     struct kernel_ethtool_coalesce *kernel_coal,
-			     struct netlink_ext_ack *extack)
+			     struct ethtool_coalesce *ecmd)
 {
 	struct sky2_port *sky2 = netdev_priv(dev);
 	struct sky2_hw *hw = sky2->hw;
@@ -4697,7 +4693,7 @@ static const struct net_device_ops sky2_netdev_ops[2] = {
 	.ndo_open		= sky2_open,
 	.ndo_stop		= sky2_close,
 	.ndo_start_xmit		= sky2_xmit_frame,
-	.ndo_eth_ioctl		= sky2_ioctl,
+	.ndo_do_ioctl		= sky2_ioctl,
 	.ndo_validate_addr	= eth_validate_addr,
 	.ndo_set_mac_address	= sky2_set_mac_address,
 	.ndo_set_rx_mode	= sky2_set_multicast,
@@ -4714,7 +4710,7 @@ static const struct net_device_ops sky2_netdev_ops[2] = {
 	.ndo_open		= sky2_open,
 	.ndo_stop		= sky2_close,
 	.ndo_start_xmit		= sky2_xmit_frame,
-	.ndo_eth_ioctl		= sky2_ioctl,
+	.ndo_do_ioctl		= sky2_ioctl,
 	.ndo_validate_addr	= eth_validate_addr,
 	.ndo_set_mac_address	= sky2_set_mac_address,
 	.ndo_set_rx_mode	= sky2_set_multicast,
@@ -4888,7 +4884,7 @@ static int sky2_test_msi(struct sky2_hw *hw)
 /* This driver supports yukon2 chipset only */
 static const char *sky2_name(u8 chipid, char *buf, int sz)
 {
-	static const char *const name[] = {
+	const char *name[] = {
 		"XL",		/* 0xb3 */
 		"EC Ultra", 	/* 0xb4 */
 		"Extreme",	/* 0xb5 */

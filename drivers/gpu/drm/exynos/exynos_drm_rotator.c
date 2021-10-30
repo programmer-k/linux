@@ -278,6 +278,7 @@ static const struct component_ops rotator_component_ops = {
 static int rotator_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct resource	*regs_res;
 	struct rot_context *rot;
 	const struct rot_variant *variant;
 	int irq;
@@ -291,7 +292,8 @@ static int rotator_probe(struct platform_device *pdev)
 	rot->formats = variant->formats;
 	rot->num_formats = variant->num_formats;
 	rot->dev = dev;
-	rot->regs = devm_platform_ioremap_resource(pdev, 0);
+	regs_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	rot->regs = devm_ioremap_resource(dev, regs_res);
 	if (IS_ERR(rot->regs))
 		return PTR_ERR(rot->regs);
 

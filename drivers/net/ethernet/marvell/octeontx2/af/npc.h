@@ -1,8 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* Marvell RVU Admin Function driver
+/*  Marvell OcteonTx2 RVU Admin Function driver
  *
- * Copyright (C) 2018 Marvell.
+ * Copyright (C) 2018 Marvell International Ltd.
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 
 #ifndef NPC_H
@@ -169,8 +172,6 @@ enum key_fields {
 	NPC_DMAC,
 	NPC_SMAC,
 	NPC_ETYPE,
-	NPC_VLAN_ETYPE_CTAG, /* 0x8100 */
-	NPC_VLAN_ETYPE_STAG, /* 0x88A8 */
 	NPC_OUTER_VID,
 	NPC_TOS,
 	NPC_SIP_IPV4,

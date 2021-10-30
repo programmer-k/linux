@@ -133,9 +133,6 @@ static int sdw_program_slave_port_params(struct sdw_bus *bus,
 	int ret;
 	u8 wbuf;
 
-	if (s_rt->slave->is_mockup_device)
-		return 0;
-
 	dpn_prop = sdw_get_slave_dpn_prop(s_rt->slave,
 					  s_rt->direction,
 					  t_params->port_num);
@@ -700,7 +697,7 @@ static int sdw_bank_switch(struct sdw_bus *bus, int m_rt_count)
 	else
 		ret = sdw_transfer(bus, wr_msg);
 
-	if (ret < 0 && ret != -ENODATA) {
+	if (ret < 0) {
 		dev_err(bus->dev, "Slave frame_ctrl reg write failed\n");
 		goto error;
 	}

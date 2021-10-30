@@ -2314,14 +2314,6 @@ uart_report_port(struct uart_driver *drv, struct uart_port *port)
 	       port->dev ? ": " : "",
 	       port->name,
 	       address, port->irq, port->uartclk / 16, uart_type(port));
-
-	/* The magic multiplier feature is a bit obscure, so report it too.  */
-	if (port->flags & UPF_MAGIC_MULTIPLIER)
-		pr_info("%s%s%s extra baud rates supported: %d, %d",
-			port->dev ? dev_name(port->dev) : "",
-			port->dev ? ": " : "",
-			port->name,
-			port->uartclk / 8, port->uartclk / 4);
 }
 
 static void
@@ -2530,12 +2522,9 @@ int uart_register_driver(struct uart_driver *drv)
 	if (!drv->state)
 		goto out;
 
-	normal = tty_alloc_driver(drv->nr, TTY_DRIVER_REAL_RAW |
-			TTY_DRIVER_DYNAMIC_DEV);
-	if (IS_ERR(normal)) {
-		retval = PTR_ERR(normal);
+	normal = alloc_tty_driver(drv->nr);
+	if (!normal)
 		goto out_kfree;
-	}
 
 	drv->tty_driver = normal;
 
@@ -2548,6 +2537,7 @@ int uart_register_driver(struct uart_driver *drv)
 	normal->init_termios	= tty_std_termios;
 	normal->init_termios.c_cflag = B9600 | CS8 | CREAD | HUPCL | CLOCAL;
 	normal->init_termios.c_ispeed = normal->init_termios.c_ospeed = 9600;
+	normal->flags		= TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV;
 	normal->driver_state    = drv;
 	tty_set_operations(normal, &uart_ops);
 
@@ -2568,7 +2558,7 @@ int uart_register_driver(struct uart_driver *drv)
 
 	for (i = 0; i < drv->nr; i++)
 		tty_port_destroy(&drv->state[i].port);
-	tty_driver_kref_put(normal);
+	put_tty_driver(normal);
 out_kfree:
 	kfree(drv->state);
 out:
@@ -2590,7 +2580,7 @@ void uart_unregister_driver(struct uart_driver *drv)
 	unsigned int i;
 
 	tty_unregister_driver(p);
-	tty_driver_kref_put(p);
+	put_tty_driver(p);
 	for (i = 0; i < drv->nr; i++)
 		tty_port_destroy(&drv->state[i].port);
 	kfree(drv->state);

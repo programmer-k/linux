@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
-/* Copyright 2019 NXP
+/* Copyright 2019 NXP Semiconductors
  */
 #include <linux/dsa/ocelot.h>
+#include <soc/mscc/ocelot.h>
 #include "dsa_priv.h"
 
 static void ocelot_xmit_common(struct sk_buff *skb, struct net_device *netdev,
@@ -54,7 +55,8 @@ static struct sk_buff *seville_xmit(struct sk_buff *skb,
 }
 
 static struct sk_buff *ocelot_rcv(struct sk_buff *skb,
-				  struct net_device *netdev)
+				  struct net_device *netdev,
+				  struct packet_type *pt)
 {
 	u64 src_port, qos_class;
 	u64 vlan_tci, tag_type;
@@ -102,7 +104,7 @@ static struct sk_buff *ocelot_rcv(struct sk_buff *skb,
 		 */
 		return NULL;
 
-	dsa_default_offload_fwd_mark(skb);
+	skb->offload_fwd_mark = 1;
 	skb->priority = qos_class;
 
 	/* Ocelot switches copy frames unmodified to the CPU. However, it is

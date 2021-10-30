@@ -129,13 +129,19 @@
 
 #define HNS_ROCE_V2_TABLE_CHUNK_SIZE		(1 << 18)
 
-enum {
-	HNS_ROCE_CMD_FLAG_IN = BIT(0),
-	HNS_ROCE_CMD_FLAG_OUT = BIT(1),
-	HNS_ROCE_CMD_FLAG_NEXT = BIT(2),
-	HNS_ROCE_CMD_FLAG_WR = BIT(3),
-	HNS_ROCE_CMD_FLAG_ERR_INTR = BIT(5),
-};
+#define HNS_ROCE_CMD_FLAG_IN_VALID_SHIFT	0
+#define HNS_ROCE_CMD_FLAG_OUT_VALID_SHIFT	1
+#define HNS_ROCE_CMD_FLAG_NEXT_SHIFT		2
+#define HNS_ROCE_CMD_FLAG_WR_OR_RD_SHIFT	3
+#define HNS_ROCE_CMD_FLAG_NO_INTR_SHIFT		4
+#define HNS_ROCE_CMD_FLAG_ERR_INTR_SHIFT	5
+
+#define HNS_ROCE_CMD_FLAG_IN		BIT(HNS_ROCE_CMD_FLAG_IN_VALID_SHIFT)
+#define HNS_ROCE_CMD_FLAG_OUT		BIT(HNS_ROCE_CMD_FLAG_OUT_VALID_SHIFT)
+#define HNS_ROCE_CMD_FLAG_NEXT		BIT(HNS_ROCE_CMD_FLAG_NEXT_SHIFT)
+#define HNS_ROCE_CMD_FLAG_WR		BIT(HNS_ROCE_CMD_FLAG_WR_OR_RD_SHIFT)
+#define HNS_ROCE_CMD_FLAG_NO_INTR	BIT(HNS_ROCE_CMD_FLAG_NO_INTR_SHIFT)
+#define HNS_ROCE_CMD_FLAG_ERR_INTR	BIT(HNS_ROCE_CMD_FLAG_ERR_INTR_SHIFT)
 
 #define HNS_ROCE_CMQ_DESC_NUM_S		3
 
@@ -1407,6 +1413,7 @@ struct hns_roce_cmq_desc {
 			__le32 rsv[4];
 		} func_info;
 	};
+
 };
 
 struct hns_roce_v2_cmq_ring {
@@ -1440,7 +1447,7 @@ struct hns_roce_v2_priv {
 
 struct hns_roce_dip {
 	u8 dgid[GID_LEN_V2];
-	u32 dip_idx;
+	u8 dip_idx;
 	struct list_head node;	/* all dips are on a list */
 };
 

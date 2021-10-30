@@ -466,9 +466,12 @@ static int finish_packet(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 		       struct rxe_pkt_info *pkt, struct sk_buff *skb,
 		       int paylen)
 {
+	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
+	u32 crc = 0;
+	u32 *p;
 	int err;
 
-	err = rxe_prepare(pkt, skb);
+	err = rxe_prepare(pkt, skb, &crc);
 	if (err)
 		return err;
 
@@ -476,6 +479,7 @@ static int finish_packet(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 		if (wqe->wr.send_flags & IB_SEND_INLINE) {
 			u8 *tmp = &wqe->dma.inline_data[wqe->dma.sge_offset];
 
+			crc = rxe_crc32(rxe, crc, tmp, paylen);
 			memcpy(payload_addr(pkt), tmp, paylen);
 
 			wqe->dma.resid -= paylen;
@@ -483,7 +487,8 @@ static int finish_packet(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 		} else {
 			err = copy_data(qp->pd, 0, &wqe->dma,
 					payload_addr(pkt), paylen,
-					RXE_FROM_MR_OBJ);
+					RXE_FROM_MR_OBJ,
+					&crc);
 			if (err)
 				return err;
 		}
@@ -491,8 +496,12 @@ static int finish_packet(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 			u8 *pad = payload_addr(pkt) + paylen;
 
 			memset(pad, 0, bth_pad(pkt));
+			crc = rxe_crc32(rxe, crc, pad, bth_pad(pkt));
 		}
 	}
+	p = payload_addr(pkt) + paylen + bth_pad(pkt);
+
+	*p = ~crc;
 
 	return 0;
 }

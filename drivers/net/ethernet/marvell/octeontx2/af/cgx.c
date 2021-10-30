@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Marvell OcteonTx2 CGX driver
  *
- * Copyright (C) 2018 Marvell.
+ * Copyright (C) 2018 Marvell International Ltd.
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 
 #include <linux/acpi.h>
@@ -1487,7 +1490,7 @@ static int cgx_lmac_init(struct cgx *cgx)
 				MAX_DMAC_ENTRIES_PER_CGX / cgx->lmac_count;
 		err = rvu_alloc_bitmap(&lmac->mac_to_index_bmap);
 		if (err)
-			goto err_name_free;
+			return err;
 
 		/* Reserve first entry for default MAC address */
 		set_bit(0, lmac->mac_to_index_bmap.bmap);
@@ -1497,7 +1500,7 @@ static int cgx_lmac_init(struct cgx *cgx)
 		spin_lock_init(&lmac->event_cb_lock);
 		err = cgx_configure_interrupt(cgx, lmac, lmac->lmac_id, false);
 		if (err)
-			goto err_bitmap_free;
+			goto err_irq;
 
 		/* Add reference */
 		cgx->lmac_idmap[lmac->lmac_id] = lmac;
@@ -1507,9 +1510,7 @@ static int cgx_lmac_init(struct cgx *cgx)
 
 	return cgx_lmac_verify_fwi_version(cgx);
 
-err_bitmap_free:
-	rvu_free_bitmap(&lmac->mac_to_index_bmap);
-err_name_free:
+err_irq:
 	kfree(lmac->name);
 err_lmac_free:
 	kfree(lmac);

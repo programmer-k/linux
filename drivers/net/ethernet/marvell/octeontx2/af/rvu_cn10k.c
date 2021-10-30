@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-/* Marvell RPM CN10K driver
+/*  Marvell RPM CN10K driver
  *
  * Copyright (C) 2020 Marvell.
  */
@@ -49,7 +49,6 @@ static int lmtst_map_table_ops(struct rvu *rvu, u32 index, u64 *val,
 	return 0;
 }
 
-#define LMT_MAP_TBL_W1_OFF  8
 static u32 rvu_get_lmtst_tbl_index(struct rvu *rvu, u16 pcifunc)
 {
 	return ((rvu_get_pf(pcifunc) * rvu->hw->total_vfs) +
@@ -83,10 +82,10 @@ static int rvu_get_lmtaddr(struct rvu *rvu, u16 pcifunc,
 		dev_err(rvu->dev, "%s LMTLINE iova transulation failed err:%llx\n", __func__, val);
 		return -EIO;
 	}
-	/* PA[51:12] = RVU_AF_SMMU_TLN_FLIT0[57:18]
+	/* PA[51:12] = RVU_AF_SMMU_TLN_FLIT1[60:21]
 	 * PA[11:0] = IOVA[11:0]
 	 */
-	pa = rvu_read64(rvu, BLKADDR_RVUM, RVU_AF_SMMU_TLN_FLIT0) >> 18;
+	pa = rvu_read64(rvu, BLKADDR_RVUM, RVU_AF_SMMU_TLN_FLIT1) >> 21;
 	pa &= GENMASK_ULL(39, 0);
 	*lmt_addr = (pa << 12) | (iova  & 0xFFF);
 
@@ -132,11 +131,9 @@ int rvu_mbox_handler_lmtst_tbl_setup(struct rvu *rvu,
 				     struct lmtst_tbl_setup_req *req,
 				     struct msg_rsp *rsp)
 {
-	struct rvu_pfvf *pfvf = rvu_get_pfvf(rvu, req->hdr.pcifunc);
-	u32 pri_tbl_idx, tbl_idx;
-	u64 lmt_addr;
+	u64 lmt_addr, val;
+	u32 pri_tbl_idx;
 	int err = 0;
-	u64 val;
 
 	/* Check if PF_FUNC wants to use it's own local memory as LMTLINE
 	 * region, if so, convert that IOVA to physical address and
@@ -173,7 +170,7 @@ int rvu_mbox_handler_lmtst_tbl_setup(struct rvu *rvu,
 			dev_err(rvu->dev,
 				"Failed to read LMT map table: index 0x%x err %d\n",
 				pri_tbl_idx, err);
-			goto error;
+			return err;
 		}
 
 		/* Update the base lmt addr of secondary with primary's base
@@ -184,53 +181,7 @@ int rvu_mbox_handler_lmtst_tbl_setup(struct rvu *rvu,
 			return err;
 	}
 
-	/* This mailbox can also be used to update word1 of APR_LMT_MAP_ENTRY_S
-	 * like enabling scheduled LMTST, disable LMTLINE prefetch, disable
-	 * early completion for ordered LMTST.
-	 */
-	if (req->sch_ena || req->dis_sched_early_comp || req->dis_line_pref) {
-		tbl_idx = rvu_get_lmtst_tbl_index(rvu, req->hdr.pcifunc);
-		err = lmtst_map_table_ops(rvu, tbl_idx + LMT_MAP_TBL_W1_OFF,
-					  &val, LMT_TBL_OP_READ);
-		if (err) {
-			dev_err(rvu->dev,
-				"Failed to read LMT map table: index 0x%x err %d\n",
-				tbl_idx + LMT_MAP_TBL_W1_OFF, err);
-			goto error;
-		}
-
-		/* Storing lmt map table entry word1 default value as this needs
-		 * to be reverted in FLR. Also making sure this default value
-		 * doesn't get overwritten on multiple calls to this mailbox.
-		 */
-		if (!pfvf->lmt_map_ent_w1)
-			pfvf->lmt_map_ent_w1 = val;
-
-		/* Disable early completion for Ordered LMTSTs. */
-		if (req->dis_sched_early_comp)
-			val |= (req->dis_sched_early_comp <<
-				APR_LMT_MAP_ENT_DIS_SCH_CMP_SHIFT);
-		/* Enable scheduled LMTST */
-		if (req->sch_ena)
-			val |= (req->sch_ena << APR_LMT_MAP_ENT_SCH_ENA_SHIFT) |
-				req->ssow_pf_func;
-		/* Disables LMTLINE prefetch before receiving store data. */
-		if (req->dis_line_pref)
-			val |= (req->dis_line_pref <<
-				APR_LMT_MAP_ENT_DIS_LINE_PREF_SHIFT);
-
-		err = lmtst_map_table_ops(rvu, tbl_idx + LMT_MAP_TBL_W1_OFF,
-					  &val, LMT_TBL_OP_WRITE);
-		if (err) {
-			dev_err(rvu->dev,
-				"Failed to update LMT map table: index 0x%x err %d\n",
-				tbl_idx + LMT_MAP_TBL_W1_OFF, err);
-			goto error;
-		}
-	}
-
-error:
-	return err;
+	return 0;
 }
 
 /* Resetting the lmtst map table to original base addresses */
@@ -243,45 +194,27 @@ void rvu_reset_lmt_map_tbl(struct rvu *rvu, u16 pcifunc)
 	if (is_rvu_otx2(rvu))
 		return;
 
-	if (pfvf->lmt_base_addr || pfvf->lmt_map_ent_w1) {
+	if (pfvf->lmt_base_addr) {
 		/* This corresponds to lmt map table index */
 		tbl_idx = rvu_get_lmtst_tbl_index(rvu, pcifunc);
 		/* Reverting back original lmt base addr for respective
 		 * pcifunc.
 		 */
-		if (pfvf->lmt_base_addr) {
-			err = lmtst_map_table_ops(rvu, tbl_idx,
-						  &pfvf->lmt_base_addr,
-						  LMT_TBL_OP_WRITE);
-			if (err)
-				dev_err(rvu->dev,
-					"Failed to update LMT map table: index 0x%x err %d\n",
-					tbl_idx, err);
-			pfvf->lmt_base_addr = 0;
-		}
-		/* Reverting back to orginal word1 val of lmtst map table entry
-		 * which underwent changes.
-		 */
-		if (pfvf->lmt_map_ent_w1) {
-			err = lmtst_map_table_ops(rvu,
-						  tbl_idx + LMT_MAP_TBL_W1_OFF,
-						  &pfvf->lmt_map_ent_w1,
-						  LMT_TBL_OP_WRITE);
-			if (err)
-				dev_err(rvu->dev,
-					"Failed to update LMT map table: index 0x%x err %d\n",
-					tbl_idx + LMT_MAP_TBL_W1_OFF, err);
-			pfvf->lmt_map_ent_w1 = 0;
-		}
+		err = lmtst_map_table_ops(rvu, tbl_idx, &pfvf->lmt_base_addr,
+					  LMT_TBL_OP_WRITE);
+		if (err)
+			dev_err(rvu->dev,
+				"Failed to update LMT map table: index 0x%x err %d\n",
+				tbl_idx, err);
+		pfvf->lmt_base_addr = 0;
 	}
 }
 
 int rvu_set_channels_base(struct rvu *rvu)
 {
-	u16 nr_lbk_chans, nr_sdp_chans, nr_cgx_chans, nr_cpt_chans;
-	u16 sdp_chan_base, cgx_chan_base, cpt_chan_base;
 	struct rvu_hwinfo *hw = rvu->hw;
-	u64 nix_const, nix_const1;
+	u16 cpt_chan_base;
+	u64 nix_const;
 	int blkaddr;
 
 	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NIX, 0);
@@ -289,7 +222,6 @@ int rvu_set_channels_base(struct rvu *rvu)
 		return blkaddr;
 
 	nix_const = rvu_read64(rvu, blkaddr, NIX_AF_CONST);
-	nix_const1 = rvu_read64(rvu, blkaddr, NIX_AF_CONST1);
 
 	hw->cgx = (nix_const >> 12) & 0xFULL;
 	hw->lmac_per_cgx = (nix_const >> 8) & 0xFULL;
@@ -312,24 +244,14 @@ int rvu_set_channels_base(struct rvu *rvu)
 	 * channels such that all channel numbers are contiguous
 	 * leaving no holes. This way the new CPT channels can be
 	 * accomodated. The order of channel numbers assigned is
-	 * LBK, SDP, CGX and CPT. Also the base channel number
-	 * of a block must be multiple of number of channels
-	 * of the block.
+	 * LBK, SDP, CGX and CPT.
 	 */
-	nr_lbk_chans = (nix_const >> 16) & 0xFFULL;
-	nr_sdp_chans = nix_const1 & 0xFFFULL;
-	nr_cgx_chans = nix_const & 0xFFULL;
-	nr_cpt_chans = (nix_const >> 32) & 0xFFFULL;
+	hw->sdp_chan_base = hw->lbk_chan_base + hw->lbk_links *
+				((nix_const >> 16) & 0xFFULL);
+	hw->cgx_chan_base = hw->sdp_chan_base + hw->sdp_links * SDP_CHANNELS;
 
-	sdp_chan_base = hw->lbk_chan_base + hw->lbk_links * nr_lbk_chans;
-	/* Round up base channel to multiple of number of channels */
-	hw->sdp_chan_base = ALIGN(sdp_chan_base, nr_sdp_chans);
-
-	cgx_chan_base = hw->sdp_chan_base + hw->sdp_links * nr_sdp_chans;
-	hw->cgx_chan_base = ALIGN(cgx_chan_base, nr_cgx_chans);
-
-	cpt_chan_base = hw->cgx_chan_base + hw->cgx_links * nr_cgx_chans;
-	hw->cpt_chan_base = ALIGN(cpt_chan_base, nr_cpt_chans);
+	cpt_chan_base = hw->cgx_chan_base + hw->cgx_links *
+				(nix_const & 0xFFULL);
 
 	/* Out of 4096 channels start CPT from 2048 so
 	 * that MSB for CPT channels is always set
@@ -433,7 +355,6 @@ err_put:
 
 static void __rvu_nix_set_channels(struct rvu *rvu, int blkaddr)
 {
-	u64 nix_const1 = rvu_read64(rvu, blkaddr, NIX_AF_CONST1);
 	u64 nix_const = rvu_read64(rvu, blkaddr, NIX_AF_CONST);
 	u16 cgx_chans, lbk_chans, sdp_chans, cpt_chans;
 	struct rvu_hwinfo *hw = rvu->hw;
@@ -443,7 +364,7 @@ static void __rvu_nix_set_channels(struct rvu *rvu, int blkaddr)
 
 	cgx_chans = nix_const & 0xFFULL;
 	lbk_chans = (nix_const >> 16) & 0xFFULL;
-	sdp_chans = nix_const1 & 0xFFFULL;
+	sdp_chans = SDP_CHANNELS;
 	cpt_chans = (nix_const >> 32) & 0xFFFULL;
 
 	start = hw->cgx_chan_base;

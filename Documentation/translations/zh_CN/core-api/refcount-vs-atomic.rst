@@ -1,12 +1,10 @@
 .. include:: ../disclaimer-zh_CN.rst
 
 :Original: Documentation/core-api/refcount-vs-atomic.rst
-
-:翻译:
-
- 司延腾 Yanteng Si <siyanteng@loongson.cn>
+:Translator: Yanteng Si <siyanteng@loongson.cn>
 
 .. _cn_refcount-vs-atomic:
+
 
 =======================================
 与atomic_t相比，refcount_t的API是这样的

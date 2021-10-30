@@ -52,7 +52,7 @@ properties:
       of the data and clock lines.
 
   port:
-    $ref: /schemas/graph.yaml#/$defs/port-base
+    $ref: /schemas/graph.yaml#/properties/port
     description:
       Input port node, single endpoint describing the input pad.
 

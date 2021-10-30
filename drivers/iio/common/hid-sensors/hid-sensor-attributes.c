@@ -6,10 +6,11 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/time.h>
-#include <linux/units.h>
 
 #include <linux/hid-sensor-hub.h>
 #include <linux/iio/iio.h>
+
+#define HZ_PER_MHZ	1000000L
 
 static struct {
 	u32 usage_id;

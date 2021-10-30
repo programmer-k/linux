@@ -34,10 +34,6 @@ properties:
       - description: SCMI compliant firmware with ARM SMC/HVC transport
         items:
           - const: arm,scmi-smc
-      - description: SCMI compliant firmware with SCMI Virtio transport.
-                     The virtio transport only supports a single device.
-        items:
-          - const: arm,scmi-virtio
 
   interrupts:
     description:
@@ -176,7 +172,6 @@ patternProperties:
       Each sub-node represents a protocol supported. If the platform
       supports a dedicated communication channel for a particular protocol,
       then the corresponding transport properties must be present.
-      The virtio transport does not support a dedicated communication channel.
 
     properties:
       reg:
@@ -200,6 +195,7 @@ patternProperties:
 
 required:
   - compatible
+  - shmem
 
 if:
   properties:
@@ -213,7 +209,6 @@ then:
 
   required:
     - mboxes
-    - shmem
 
 else:
   if:
@@ -224,7 +219,6 @@ else:
   then:
     required:
       - arm,smc-id
-      - shmem
 
 examples:
   - |

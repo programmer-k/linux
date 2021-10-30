@@ -556,7 +556,7 @@ intel_tc_port_get_target_mode(struct intel_digital_port *dig_port)
 }
 
 static void intel_tc_port_reset_mode(struct intel_digital_port *dig_port,
-				     int required_lanes, bool force_disconnect)
+				     int required_lanes)
 {
 	struct drm_i915_private *i915 = to_i915(dig_port->base.base.dev);
 	enum tc_port_mode old_tc_mode = dig_port->tc_mode;
@@ -572,8 +572,7 @@ static void intel_tc_port_reset_mode(struct intel_digital_port *dig_port,
 	}
 
 	icl_tc_phy_disconnect(dig_port);
-	if (!force_disconnect)
-		icl_tc_phy_connect(dig_port, required_lanes);
+	icl_tc_phy_connect(dig_port, required_lanes);
 
 	drm_dbg_kms(&i915->drm, "Port %s: TC port mode reset (%s -> %s)\n",
 		    dig_port->tc_port_name,
@@ -663,7 +662,7 @@ bool intel_tc_port_connected(struct intel_encoder *encoder)
 }
 
 static void __intel_tc_port_lock(struct intel_digital_port *dig_port,
-				 int required_lanes, bool force_disconnect)
+				 int required_lanes)
 {
 	struct drm_i915_private *i915 = to_i915(dig_port->base.base.dev);
 	intel_wakeref_t wakeref;
@@ -677,9 +676,8 @@ static void __intel_tc_port_lock(struct intel_digital_port *dig_port,
 
 		tc_cold_wref = tc_cold_block(dig_port);
 
-		if (force_disconnect || intel_tc_port_needs_reset(dig_port))
-			intel_tc_port_reset_mode(dig_port, required_lanes,
-						 force_disconnect);
+		if (intel_tc_port_needs_reset(dig_port))
+			intel_tc_port_reset_mode(dig_port, required_lanes);
 
 		tc_cold_unblock(dig_port, tc_cold_wref);
 	}
@@ -690,7 +688,7 @@ static void __intel_tc_port_lock(struct intel_digital_port *dig_port,
 
 void intel_tc_port_lock(struct intel_digital_port *dig_port)
 {
-	__intel_tc_port_lock(dig_port, 1, false);
+	__intel_tc_port_lock(dig_port, 1);
 }
 
 void intel_tc_port_unlock(struct intel_digital_port *dig_port)
@@ -704,24 +702,6 @@ void intel_tc_port_unlock(struct intel_digital_port *dig_port)
 				      wakeref);
 }
 
-/**
- * intel_tc_port_disconnect_phy: disconnect TypeC PHY from display port
- * @dig_port: digital port
- *
- * Disconnect the given digital port from its TypeC PHY (handing back the
- * control of the PHY to the TypeC subsystem). The only purpose of this
- * function is to force the disconnect even with a TypeC display output still
- * plugged to the TypeC connector, which is required by the TypeC firmwares
- * during system suspend and shutdown. Otherwise - during the unplug event
- * handling - the PHY ownership is released automatically by
- * intel_tc_port_reset_mode(), when calling this function is not required.
- */
-void intel_tc_port_disconnect_phy(struct intel_digital_port *dig_port)
-{
-	__intel_tc_port_lock(dig_port, 1, true);
-	intel_tc_port_unlock(dig_port);
-}
-
 bool intel_tc_port_ref_held(struct intel_digital_port *dig_port)
 {
 	return mutex_is_locked(&dig_port->tc_lock) ||
@@ -731,7 +711,7 @@ bool intel_tc_port_ref_held(struct intel_digital_port *dig_port)
 void intel_tc_port_get_link(struct intel_digital_port *dig_port,
 			    int required_lanes)
 {
-	__intel_tc_port_lock(dig_port, required_lanes, false);
+	__intel_tc_port_lock(dig_port, required_lanes);
 	dig_port->tc_link_refcount++;
 	intel_tc_port_unlock(dig_port);
 }

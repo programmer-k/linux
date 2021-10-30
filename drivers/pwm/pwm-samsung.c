@@ -580,8 +580,11 @@ static int pwm_samsung_probe(struct platform_device *pdev)
 static int pwm_samsung_remove(struct platform_device *pdev)
 {
 	struct samsung_pwm_chip *chip = platform_get_drvdata(pdev);
+	int ret;
 
-	pwmchip_remove(&chip->chip);
+	ret = pwmchip_remove(&chip->chip);
+	if (ret < 0)
+		return ret;
 
 	clk_disable_unprepare(chip->base_clk);
 

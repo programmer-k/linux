@@ -1280,7 +1280,7 @@ static bool srp_terminate_cmd(struct scsi_cmnd *scmnd, void *context_ptr,
 {
 	struct srp_terminate_context *context = context_ptr;
 	struct srp_target_port *target = context->srp_target;
-	u32 tag = blk_mq_unique_tag(scsi_cmd_to_rq(scmnd));
+	u32 tag = blk_mq_unique_tag(scmnd->request);
 	struct srp_rdma_ch *ch = &target->ch[blk_mq_unique_tag_to_hwq(tag)];
 	struct srp_request *req = scsi_cmd_priv(scmnd);
 
@@ -2152,7 +2152,6 @@ static void srp_handle_qp_err(struct ib_cq *cq, struct ib_wc *wc,
 
 static int srp_queuecommand(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 {
-	struct request *rq = scsi_cmd_to_rq(scmnd);
 	struct srp_target_port *target = host_to_target(shost);
 	struct srp_rdma_ch *ch;
 	struct srp_request *req = scsi_cmd_priv(scmnd);
@@ -2167,8 +2166,8 @@ static int srp_queuecommand(struct Scsi_Host *shost, struct scsi_cmnd *scmnd)
 	if (unlikely(scmnd->result))
 		goto err;
 
-	WARN_ON_ONCE(rq->tag < 0);
-	tag = blk_mq_unique_tag(rq);
+	WARN_ON_ONCE(scmnd->request->tag < 0);
+	tag = blk_mq_unique_tag(scmnd->request);
 	ch = &target->ch[blk_mq_unique_tag_to_hwq(tag)];
 
 	spin_lock_irqsave(&ch->lock, flags);
@@ -2792,7 +2791,7 @@ static int srp_abort(struct scsi_cmnd *scmnd)
 
 	if (!req)
 		return SUCCESS;
-	tag = blk_mq_unique_tag(scsi_cmd_to_rq(scmnd));
+	tag = blk_mq_unique_tag(scmnd->request);
 	ch_idx = blk_mq_unique_tag_to_hwq(tag);
 	if (WARN_ON_ONCE(ch_idx >= target->ch_count))
 		return SUCCESS;

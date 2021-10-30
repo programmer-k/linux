@@ -430,10 +430,17 @@ then
 	git diff HEAD >> $resdir/$ds/testid.txt
 fi
 ___EOF___
-kvm-assign-cpus.sh /sys/devices/system/node > $T/cpuarray.awk
-kvm-get-cpus-script.sh $T/cpuarray.awk $T/dumpbatches.awk
-cat << '___EOF___' >> $T/dumpbatches.awk
-BEGIN {
+awk < $T/cfgcpu.pack \
+	-v TORTURE_BUILDONLY="$TORTURE_BUILDONLY" \
+	-v CONFIGDIR="$CONFIGFRAG/" \
+	-v KVM="$KVM" \
+	-v ncpus=$cpus \
+	-v jitter="$jitter" \
+	-v rd=$resdir/$ds/ \
+	-v dur=$dur \
+	-v TORTURE_QEMU_ARG="$TORTURE_QEMU_ARG" \
+	-v TORTURE_BOOTARGS="$TORTURE_BOOTARGS" \
+'BEGIN {
 	i = 0;
 }
 
@@ -444,7 +451,7 @@ BEGIN {
 }
 
 # Dump out the scripting required to run one test batch.
-function dump(first, pastlast, batchnum,  affinitylist)
+function dump(first, pastlast, batchnum)
 {
 	print "echo ----Start batch " batchnum ": `date` | tee -a " rd "log";
 	print "needqemurun="
@@ -476,14 +483,6 @@ function dump(first, pastlast, batchnum,  affinitylist)
 		print "echo ", cfr[jn], cpusr[jn] ovf ": Starting build. `date` | tee -a " rd "log";
 		print "mkdir " rd cfr[jn] " || :";
 		print "touch " builddir ".wait";
-		affinitylist = "";
-		if (gotcpus()) {
-			affinitylist = nextcpus(cpusr[jn]);
-		}
-		if (affinitylist ~ /^[0-9,-][0-9,-]*$/)
-			print "export TORTURE_AFFINITY=" affinitylist;
-		else
-			print "export TORTURE_AFFINITY=";
 		print "kvm-test-1-run.sh " CONFIGDIR cf[j], rd cfr[jn], dur " \"" TORTURE_QEMU_ARG "\" \"" TORTURE_BOOTARGS "\" > " rd cfr[jn]  "/kvm-test-1-run.sh.out 2>&1 &"
 		print "echo ", cfr[jn], cpusr[jn] ovf ": Waiting for build to complete. `date` | tee -a " rd "log";
 		print "while test -f " builddir ".wait"
@@ -561,19 +560,7 @@ END {
 	# Dump the last batch.
 	if (ncpus != 0)
 		dump(first, i, batchnum);
-}
-___EOF___
-awk < $T/cfgcpu.pack \
-	-v TORTURE_BUILDONLY="$TORTURE_BUILDONLY" \
-	-v CONFIGDIR="$CONFIGFRAG/" \
-	-v KVM="$KVM" \
-	-v ncpus=$cpus \
-	-v jitter="$jitter" \
-	-v rd=$resdir/$ds/ \
-	-v dur=$dur \
-	-v TORTURE_QEMU_ARG="$TORTURE_QEMU_ARG" \
-	-v TORTURE_BOOTARGS="$TORTURE_BOOTARGS" \
-	-f $T/dumpbatches.awk >> $T/script
+}' >> $T/script
 echo kvm-end-run-stats.sh "$resdir/$ds" "$starttime" >> $T/script
 
 # Extract the tests and their batches from the script.

@@ -22,6 +22,7 @@
 #include <asm/processor.h>
 #include <asm/sstep.h>
 #include <asm/debug.h>
+#include <asm/debugfs.h>
 #include <asm/hvcall.h>
 #include <asm/inst.h>
 #include <linux/uaccess.h>

@@ -391,52 +391,59 @@ static int rxe_post_srq_recv(struct ib_srq *ibsrq, const struct ib_recv_wr *wr,
 	return err;
 }
 
-static int rxe_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *init,
-			 struct ib_udata *udata)
+static struct ib_qp *rxe_create_qp(struct ib_pd *ibpd,
+				   struct ib_qp_init_attr *init,
+				   struct ib_udata *udata)
 {
 	int err;
-	struct rxe_dev *rxe = to_rdev(ibqp->device);
-	struct rxe_pd *pd = to_rpd(ibqp->pd);
-	struct rxe_qp *qp = to_rqp(ibqp);
+	struct rxe_dev *rxe = to_rdev(ibpd->device);
+	struct rxe_pd *pd = to_rpd(ibpd);
+	struct rxe_qp *qp;
 	struct rxe_create_qp_resp __user *uresp = NULL;
 
 	if (udata) {
 		if (udata->outlen < sizeof(*uresp))
-			return -EINVAL;
+			return ERR_PTR(-EINVAL);
 		uresp = udata->outbuf;
 	}
 
 	if (init->create_flags)
-		return -EOPNOTSUPP;
+		return ERR_PTR(-EOPNOTSUPP);
 
 	err = rxe_qp_chk_init(rxe, init);
 	if (err)
-		return err;
+		goto err1;
+
+	qp = rxe_alloc(&rxe->qp_pool);
+	if (!qp) {
+		err = -ENOMEM;
+		goto err1;
+	}
 
 	if (udata) {
-		if (udata->inlen)
-			return -EINVAL;
-
+		if (udata->inlen) {
+			err = -EINVAL;
+			goto err2;
+		}
 		qp->is_user = true;
 	} else {
 		qp->is_user = false;
 	}
 
-	err = rxe_add_to_pool(&rxe->qp_pool, qp);
-	if (err)
-		return err;
-
 	rxe_add_index(qp);
-	err = rxe_qp_from_init(rxe, qp, pd, init, uresp, ibqp->pd, udata);
+
+	err = rxe_qp_from_init(rxe, qp, pd, init, uresp, ibpd, udata);
 	if (err)
-		goto qp_init;
+		goto err3;
 
-	return 0;
+	return &qp->ibqp;
 
-qp_init:
+err3:
 	rxe_drop_index(qp);
+err2:
 	rxe_drop_ref(qp);
-	return err;
+err1:
+	return ERR_PTR(err);
 }
 
 static int rxe_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
@@ -1138,7 +1145,6 @@ static const struct ib_device_ops rxe_dev_ops = {
 	INIT_RDMA_OBJ_SIZE(ib_ah, rxe_ah, ibah),
 	INIT_RDMA_OBJ_SIZE(ib_cq, rxe_cq, ibcq),
 	INIT_RDMA_OBJ_SIZE(ib_pd, rxe_pd, ibpd),
-	INIT_RDMA_OBJ_SIZE(ib_qp, rxe_qp, ibqp),
 	INIT_RDMA_OBJ_SIZE(ib_srq, rxe_srq, ibsrq),
 	INIT_RDMA_OBJ_SIZE(ib_ucontext, rxe_ucontext, ibuc),
 	INIT_RDMA_OBJ_SIZE(ib_mw, rxe_mw, ibmw),
@@ -1148,6 +1154,7 @@ int rxe_register_device(struct rxe_dev *rxe, const char *ibdev_name)
 {
 	int err;
 	struct ib_device *dev = &rxe->ib_dev;
+	struct crypto_shash *tfm;
 
 	strscpy(dev->node_desc, "rxe", sizeof(dev->node_desc));
 
@@ -1166,9 +1173,13 @@ int rxe_register_device(struct rxe_dev *rxe, const char *ibdev_name)
 	if (err)
 		return err;
 
-	err = rxe_icrc_init(rxe);
-	if (err)
-		return err;
+	tfm = crypto_alloc_shash("crc32", 0, 0);
+	if (IS_ERR(tfm)) {
+		pr_err("failed to allocate crc algorithm err:%ld\n",
+		       PTR_ERR(tfm));
+		return PTR_ERR(tfm);
+	}
+	rxe->tfm = tfm;
 
 	err = ib_register_device(dev, ibdev_name, NULL);
 	if (err)

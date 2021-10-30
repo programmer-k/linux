@@ -1,12 +1,10 @@
 .. include:: ../disclaimer-zh_CN.rst
 
 :Original: Documentation/core-api/printk-formats.rst
-
-:翻译:
-
- 司延腾 Yanteng Si <siyanteng@loongson.cn>
+:Translator: Yanteng Si <siyanteng@loongson.cn>
 
 .. _cn_printk-formats.rst:
+
 
 ==============================
 如何获得正确的printk格式占位符

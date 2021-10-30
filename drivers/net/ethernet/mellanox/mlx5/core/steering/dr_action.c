@@ -18,38 +18,11 @@ enum dr_action_valid_state {
 	DR_ACTION_STATE_ENCAP,
 	DR_ACTION_STATE_DECAP,
 	DR_ACTION_STATE_MODIFY_HDR,
-	DR_ACTION_STATE_POP_VLAN,
-	DR_ACTION_STATE_PUSH_VLAN,
+	DR_ACTION_STATE_MODIFY_VLAN,
 	DR_ACTION_STATE_NON_TERM,
 	DR_ACTION_STATE_TERM,
 	DR_ACTION_STATE_MAX,
 };
-
-static const char * const action_type_to_str[] = {
-	[DR_ACTION_TYP_TNL_L2_TO_L2] = "DR_ACTION_TYP_TNL_L2_TO_L2",
-	[DR_ACTION_TYP_L2_TO_TNL_L2] = "DR_ACTION_TYP_L2_TO_TNL_L2",
-	[DR_ACTION_TYP_TNL_L3_TO_L2] = "DR_ACTION_TYP_TNL_L3_TO_L2",
-	[DR_ACTION_TYP_L2_TO_TNL_L3] = "DR_ACTION_TYP_L2_TO_TNL_L3",
-	[DR_ACTION_TYP_DROP] = "DR_ACTION_TYP_DROP",
-	[DR_ACTION_TYP_QP] = "DR_ACTION_TYP_QP",
-	[DR_ACTION_TYP_FT] = "DR_ACTION_TYP_FT",
-	[DR_ACTION_TYP_CTR] = "DR_ACTION_TYP_CTR",
-	[DR_ACTION_TYP_TAG] = "DR_ACTION_TYP_TAG",
-	[DR_ACTION_TYP_MODIFY_HDR] = "DR_ACTION_TYP_MODIFY_HDR",
-	[DR_ACTION_TYP_VPORT] = "DR_ACTION_TYP_VPORT",
-	[DR_ACTION_TYP_POP_VLAN] = "DR_ACTION_TYP_POP_VLAN",
-	[DR_ACTION_TYP_PUSH_VLAN] = "DR_ACTION_TYP_PUSH_VLAN",
-	[DR_ACTION_TYP_INSERT_HDR] = "DR_ACTION_TYP_INSERT_HDR",
-	[DR_ACTION_TYP_REMOVE_HDR] = "DR_ACTION_TYP_REMOVE_HDR",
-	[DR_ACTION_TYP_MAX] = "DR_ACTION_UNKNOWN",
-};
-
-static const char *dr_action_id_to_str(enum mlx5dr_action_type action_id)
-{
-	if (action_id > DR_ACTION_TYP_MAX)
-		action_id = DR_ACTION_TYP_MAX;
-	return action_type_to_str[action_id];
-}
 
 static const enum dr_action_valid_state
 next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] = {
@@ -66,10 +39,8 @@ next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] 
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_REMOVE_HDR]	= DR_ACTION_STATE_DECAP,
 			[DR_ACTION_TYP_MODIFY_HDR]	= DR_ACTION_STATE_MODIFY_HDR,
-			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_POP_VLAN,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
+			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
 		},
 		[DR_ACTION_STATE_DECAP] = {
 			[DR_ACTION_TYP_DROP]		= DR_ACTION_STATE_TERM,
@@ -82,8 +53,7 @@ next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] 
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_MODIFY_HDR]	= DR_ACTION_STATE_MODIFY_HDR,
-			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_POP_VLAN,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
+			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
 		},
 		[DR_ACTION_STATE_ENCAP] = {
 			[DR_ACTION_TYP_DROP]		= DR_ACTION_STATE_TERM,
@@ -103,30 +73,19 @@ next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] 
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
 		},
-		[DR_ACTION_STATE_POP_VLAN] = {
+		[DR_ACTION_STATE_MODIFY_VLAN] = {
 			[DR_ACTION_TYP_DROP]		= DR_ACTION_STATE_TERM,
 			[DR_ACTION_TYP_QP]		= DR_ACTION_STATE_TERM,
 			[DR_ACTION_TYP_FT]		= DR_ACTION_STATE_TERM,
 			[DR_ACTION_TYP_SAMPLER]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_TAG]		= DR_ACTION_STATE_POP_VLAN,
-			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_POP_VLAN,
-			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_POP_VLAN,
+			[DR_ACTION_TYP_TAG]		= DR_ACTION_STATE_MODIFY_VLAN,
+			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_MODIFY_VLAN,
+			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
 			[DR_ACTION_TYP_MODIFY_HDR]	= DR_ACTION_STATE_MODIFY_HDR,
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-		},
-		[DR_ACTION_STATE_PUSH_VLAN] = {
-			[DR_ACTION_TYP_QP]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_FT]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_SAMPLER]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_TAG]		= DR_ACTION_STATE_PUSH_VLAN,
-			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_PUSH_VLAN,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
-			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 		},
 		[DR_ACTION_STATE_NON_TERM] = {
 			[DR_ACTION_TYP_DROP]		= DR_ACTION_STATE_TERM,
@@ -140,10 +99,8 @@ next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] 
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_REMOVE_HDR]	= DR_ACTION_STATE_DECAP,
 			[DR_ACTION_TYP_MODIFY_HDR]	= DR_ACTION_STATE_MODIFY_HDR,
-			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_POP_VLAN,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
+			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
 		},
 		[DR_ACTION_STATE_TERM] = {
 			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_TERM,
@@ -158,16 +115,8 @@ next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] 
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_REMOVE_HDR]	= DR_ACTION_STATE_DECAP,
 			[DR_ACTION_TYP_MODIFY_HDR]	= DR_ACTION_STATE_MODIFY_HDR,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
-			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_POP_VLAN,
-		},
-		[DR_ACTION_STATE_DECAP] = {
-			[DR_ACTION_TYP_DROP]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_FT]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_SAMPLER]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_DECAP,
+			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
 		},
 		[DR_ACTION_STATE_ENCAP] = {
 			[DR_ACTION_TYP_DROP]		= DR_ACTION_STATE_TERM,
@@ -183,25 +132,14 @@ next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] 
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
+			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
 		},
-		[DR_ACTION_STATE_POP_VLAN] = {
-			[DR_ACTION_TYP_FT]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_SAMPLER]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_POP_VLAN,
-			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_POP_VLAN,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
-			[DR_ACTION_TYP_MODIFY_HDR]	= DR_ACTION_STATE_MODIFY_HDR,
-			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-		},
-		[DR_ACTION_STATE_PUSH_VLAN] = {
+		[DR_ACTION_STATE_MODIFY_VLAN] = {
 			[DR_ACTION_TYP_DROP]		= DR_ACTION_STATE_TERM,
 			[DR_ACTION_TYP_FT]		= DR_ACTION_STATE_TERM,
 			[DR_ACTION_TYP_SAMPLER]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_PUSH_VLAN,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
+			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_MODIFY_VLAN,
+			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
@@ -214,10 +152,8 @@ next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] 
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_REMOVE_HDR]	= DR_ACTION_STATE_DECAP,
 			[DR_ACTION_TYP_MODIFY_HDR]	= DR_ACTION_STATE_MODIFY_HDR,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
-			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_POP_VLAN,
+			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
 		},
 		[DR_ACTION_STATE_TERM] = {
 			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_TERM,
@@ -234,10 +170,8 @@ next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] 
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_REMOVE_HDR]	= DR_ACTION_STATE_DECAP,
 			[DR_ACTION_TYP_MODIFY_HDR]	= DR_ACTION_STATE_MODIFY_HDR,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
-			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_POP_VLAN,
+			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
 			[DR_ACTION_TYP_VPORT]		= DR_ACTION_STATE_TERM,
 		},
 		[DR_ACTION_STATE_DECAP] = {
@@ -246,12 +180,11 @@ next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] 
 			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_DECAP,
 			[DR_ACTION_TYP_SAMPLER]		= DR_ACTION_STATE_TERM,
 			[DR_ACTION_TYP_MODIFY_HDR]	= DR_ACTION_STATE_MODIFY_HDR,
+			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
 			[DR_ACTION_TYP_VPORT]		= DR_ACTION_STATE_TERM,
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_POP_VLAN,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
 		},
 		[DR_ACTION_STATE_ENCAP] = {
 			[DR_ACTION_TYP_DROP]		= DR_ACTION_STATE_TERM,
@@ -270,26 +203,13 @@ next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] 
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
 		},
-		[DR_ACTION_STATE_POP_VLAN] = {
+		[DR_ACTION_STATE_MODIFY_VLAN] = {
 			[DR_ACTION_TYP_DROP]		= DR_ACTION_STATE_TERM,
 			[DR_ACTION_TYP_FT]		= DR_ACTION_STATE_TERM,
 			[DR_ACTION_TYP_SAMPLER]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_POP_VLAN,
-			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_POP_VLAN,
-			[DR_ACTION_TYP_VPORT]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_MODIFY_HDR]	= DR_ACTION_STATE_MODIFY_HDR,
-			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-		},
-		[DR_ACTION_STATE_PUSH_VLAN] = {
-			[DR_ACTION_TYP_DROP]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_FT]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_SAMPLER]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
-			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_PUSH_VLAN,
+			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
+			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_MODIFY_VLAN,
 			[DR_ACTION_TYP_VPORT]		= DR_ACTION_STATE_TERM,
 			[DR_ACTION_TYP_MODIFY_HDR]	= DR_ACTION_STATE_MODIFY_HDR,
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
@@ -306,10 +226,8 @@ next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] 
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_REMOVE_HDR]	= DR_ACTION_STATE_DECAP,
 			[DR_ACTION_TYP_MODIFY_HDR]	= DR_ACTION_STATE_MODIFY_HDR,
-			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_POP_VLAN,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
+			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
 			[DR_ACTION_TYP_VPORT]		= DR_ACTION_STATE_TERM,
 		},
 		[DR_ACTION_STATE_TERM] = {
@@ -326,17 +244,8 @@ next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] 
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_REMOVE_HDR]	= DR_ACTION_STATE_DECAP,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
-			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_POP_VLAN,
+			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
 			[DR_ACTION_TYP_VPORT]		= DR_ACTION_STATE_TERM,
-		},
-		[DR_ACTION_STATE_DECAP] = {
-			[DR_ACTION_TYP_DROP]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_FT]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_DECAP,
-			[DR_ACTION_TYP_VPORT]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_SAMPLER]		= DR_ACTION_STATE_TERM,
 		},
 		[DR_ACTION_STATE_ENCAP] = {
 			[DR_ACTION_TYP_DROP]		= DR_ACTION_STATE_TERM,
@@ -353,27 +262,15 @@ next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] 
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
+			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
 			[DR_ACTION_TYP_VPORT]		= DR_ACTION_STATE_TERM,
 		},
-		[DR_ACTION_STATE_POP_VLAN] = {
-			[DR_ACTION_TYP_FT]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_SAMPLER]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_POP_VLAN,
-			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_POP_VLAN,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
-			[DR_ACTION_TYP_MODIFY_HDR]	= DR_ACTION_STATE_MODIFY_HDR,
-			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_VPORT]		= DR_ACTION_STATE_TERM,
-		},
-		[DR_ACTION_STATE_PUSH_VLAN] = {
+		[DR_ACTION_STATE_MODIFY_VLAN] = {
 			[DR_ACTION_TYP_DROP]		= DR_ACTION_STATE_TERM,
 			[DR_ACTION_TYP_FT]		= DR_ACTION_STATE_TERM,
 			[DR_ACTION_TYP_SAMPLER]		= DR_ACTION_STATE_TERM,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
-			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_PUSH_VLAN,
+			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
+			[DR_ACTION_TYP_CTR]		= DR_ACTION_STATE_MODIFY_VLAN,
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
@@ -388,9 +285,7 @@ next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] 
 			[DR_ACTION_TYP_L2_TO_TNL_L2]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_L2_TO_TNL_L3]	= DR_ACTION_STATE_ENCAP,
 			[DR_ACTION_TYP_INSERT_HDR]	= DR_ACTION_STATE_ENCAP,
-			[DR_ACTION_TYP_REMOVE_HDR]	= DR_ACTION_STATE_DECAP,
-			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_PUSH_VLAN,
-			[DR_ACTION_TYP_POP_VLAN]	= DR_ACTION_STATE_POP_VLAN,
+			[DR_ACTION_TYP_PUSH_VLAN]	= DR_ACTION_STATE_MODIFY_VLAN,
 			[DR_ACTION_TYP_VPORT]		= DR_ACTION_STATE_TERM,
 		},
 		[DR_ACTION_STATE_TERM] = {
@@ -419,9 +314,6 @@ dr_action_reformat_to_action_type(enum mlx5dr_action_reformat_type reformat_type
 	case DR_ACTION_REFORMAT_TYP_INSERT_HDR:
 		*action_type = DR_ACTION_TYP_INSERT_HDR;
 		break;
-	case DR_ACTION_REFORMAT_TYP_REMOVE_HDR:
-		*action_type = DR_ACTION_TYP_REMOVE_HDR;
-		break;
 	default:
 		return -EINVAL;
 	}
@@ -434,7 +326,7 @@ dr_action_reformat_to_action_type(enum mlx5dr_action_reformat_type reformat_type
  * the new size of the STEs array, rule with actions.
  */
 static void dr_actions_apply(struct mlx5dr_domain *dmn,
-			     enum mlx5dr_domain_nic_type nic_type,
+			     enum mlx5dr_ste_entry_type ste_type,
 			     u8 *action_type_set,
 			     u8 *last_ste,
 			     struct mlx5dr_ste_actions_attr *attr,
@@ -443,7 +335,7 @@ static void dr_actions_apply(struct mlx5dr_domain *dmn,
 	struct mlx5dr_ste_ctx *ste_ctx = dmn->ste_ctx;
 	u32 added_stes = 0;
 
-	if (nic_type == DR_DOMAIN_NIC_TYPE_RX)
+	if (ste_type == MLX5DR_STE_TYPE_RX)
 		mlx5dr_ste_set_actions_rx(ste_ctx, dmn, action_type_set,
 					  last_ste, attr, &added_stes);
 	else
@@ -455,7 +347,7 @@ static void dr_actions_apply(struct mlx5dr_domain *dmn,
 
 static enum dr_action_domain
 dr_action_get_action_domain(enum mlx5dr_domain_type domain,
-			    enum mlx5dr_domain_nic_type nic_type)
+			    enum mlx5dr_ste_entry_type ste_type)
 {
 	switch (domain) {
 	case MLX5DR_DOMAIN_TYPE_NIC_RX:
@@ -463,7 +355,7 @@ dr_action_get_action_domain(enum mlx5dr_domain_type domain,
 	case MLX5DR_DOMAIN_TYPE_NIC_TX:
 		return DR_ACTION_DOMAIN_NIC_EGRESS;
 	case MLX5DR_DOMAIN_TYPE_FDB:
-		if (nic_type == DR_DOMAIN_NIC_TYPE_RX)
+		if (ste_type == MLX5DR_STE_TYPE_RX)
 			return DR_ACTION_DOMAIN_FDB_INGRESS;
 		return DR_ACTION_DOMAIN_FDB_EGRESS;
 	default:
@@ -529,18 +421,6 @@ static int dr_action_handle_cs_recalc(struct mlx5dr_domain *dmn,
 	return 0;
 }
 
-static void dr_action_print_sequence(struct mlx5dr_domain *dmn,
-				     struct mlx5dr_action *actions[],
-				     int last_idx)
-{
-	int i;
-
-	for (i = 0; i <= last_idx; i++)
-		mlx5dr_err(dmn, "< %s (%d) > ",
-			   dr_action_id_to_str(actions[i]->action_type),
-			   actions[i]->action_type);
-}
-
 #define WITH_VLAN_NUM_HW_ACTIONS 6
 
 int mlx5dr_actions_build_ste_arr(struct mlx5dr_matcher *matcher,
@@ -551,7 +431,7 @@ int mlx5dr_actions_build_ste_arr(struct mlx5dr_matcher *matcher,
 				 u32 *new_hw_ste_arr_sz)
 {
 	struct mlx5dr_domain_rx_tx *nic_dmn = nic_matcher->nic_tbl->nic_dmn;
-	bool rx_rule = nic_dmn->type == DR_DOMAIN_NIC_TYPE_RX;
+	bool rx_rule = nic_dmn->ste_type == MLX5DR_STE_TYPE_RX;
 	struct mlx5dr_domain *dmn = matcher->tbl->dmn;
 	u8 action_type_set[DR_ACTION_TYP_MAX] = {};
 	struct mlx5dr_ste_actions_attr attr = {};
@@ -565,7 +445,7 @@ int mlx5dr_actions_build_ste_arr(struct mlx5dr_matcher *matcher,
 	attr.gvmi = dmn->info.caps.gvmi;
 	attr.hit_gvmi = dmn->info.caps.gvmi;
 	attr.final_icm_addr = nic_dmn->default_icm_addr;
-	action_domain = dr_action_get_action_domain(dmn->type, nic_dmn->type);
+	action_domain = dr_action_get_action_domain(dmn->type, nic_dmn->ste_type);
 
 	for (i = 0; i < num_actions; i++) {
 		struct mlx5dr_action_dest_tbl *dest_tbl;
@@ -587,11 +467,11 @@ int mlx5dr_actions_build_ste_arr(struct mlx5dr_matcher *matcher,
 				if (dest_tbl->tbl->dmn != dmn) {
 					mlx5dr_err(dmn,
 						   "Destination table belongs to a different domain\n");
-					return -EINVAL;
+					goto out_invalid_arg;
 				}
 				if (dest_tbl->tbl->level <= matcher->tbl->level) {
-					mlx5_core_dbg_once(dmn->mdev,
-							   "Connecting table to a lower/same level destination table\n");
+					mlx5_core_warn_once(dmn->mdev,
+							    "Connecting table to a lower/same level destination table\n");
 					mlx5dr_dbg(dmn,
 						   "Connecting table at level %d to a destination table at level %d\n",
 						   matcher->tbl->level,
@@ -629,7 +509,7 @@ int mlx5dr_actions_build_ste_arr(struct mlx5dr_matcher *matcher,
 			break;
 		case DR_ACTION_TYP_QP:
 			mlx5dr_info(dmn, "Domain doesn't support QP\n");
-			return -EOPNOTSUPP;
+			goto out_invalid_arg;
 		case DR_ACTION_TYP_CTR:
 			attr.ctr_id = action->ctr->ctr_id +
 				action->ctr->offeset;
@@ -656,7 +536,7 @@ int mlx5dr_actions_build_ste_arr(struct mlx5dr_matcher *matcher,
 			if (rx_rule &&
 			    !(dmn->ste_ctx->actions_caps & DR_STE_CTX_ACTION_CAP_RX_ENCAP)) {
 				mlx5dr_info(dmn, "Device doesn't support Encap on RX\n");
-				return -EOPNOTSUPP;
+				goto out_invalid_arg;
 			}
 			attr.reformat.size = action->reformat->size;
 			attr.reformat.id = action->reformat->id;
@@ -669,66 +549,48 @@ int mlx5dr_actions_build_ste_arr(struct mlx5dr_matcher *matcher,
 			attr.hit_gvmi = action->vport->caps->vhca_gvmi;
 			dest_action = action;
 			if (rx_rule) {
-				if (action->vport->caps->num == WIRE_PORT) {
-					mlx5dr_dbg(dmn, "Device doesn't support Loopback on WIRE vport\n");
-					return -EOPNOTSUPP;
-				}
+				/* Loopback on WIRE vport is not supported */
+				if (action->vport->caps->num == WIRE_PORT)
+					goto out_invalid_arg;
+
 				attr.final_icm_addr = action->vport->caps->icm_address_rx;
 			} else {
 				attr.final_icm_addr = action->vport->caps->icm_address_tx;
 			}
 			break;
 		case DR_ACTION_TYP_POP_VLAN:
-			if (!rx_rule && !(dmn->ste_ctx->actions_caps &
-					  DR_STE_CTX_ACTION_CAP_TX_POP)) {
-				mlx5dr_dbg(dmn, "Device doesn't support POP VLAN action on TX\n");
-				return -EOPNOTSUPP;
-			}
-
 			max_actions_type = MLX5DR_MAX_VLANS;
 			attr.vlans.count++;
 			break;
 		case DR_ACTION_TYP_PUSH_VLAN:
-			if (rx_rule && !(dmn->ste_ctx->actions_caps &
-					 DR_STE_CTX_ACTION_CAP_RX_PUSH)) {
-				mlx5dr_dbg(dmn, "Device doesn't support PUSH VLAN action on RX\n");
-				return -EOPNOTSUPP;
-			}
-
 			max_actions_type = MLX5DR_MAX_VLANS;
-			if (attr.vlans.count == MLX5DR_MAX_VLANS) {
-				mlx5dr_dbg(dmn, "Max VLAN push/pop count exceeded\n");
+			if (attr.vlans.count == MLX5DR_MAX_VLANS)
 				return -EINVAL;
-			}
 
 			attr.vlans.headers[attr.vlans.count++] = action->push_vlan->vlan_hdr;
 			break;
 		case DR_ACTION_TYP_INSERT_HDR:
-		case DR_ACTION_TYP_REMOVE_HDR:
 			attr.reformat.size = action->reformat->size;
 			attr.reformat.id = action->reformat->id;
 			attr.reformat.param_0 = action->reformat->param_0;
 			attr.reformat.param_1 = action->reformat->param_1;
 			break;
 		default:
-			mlx5dr_err(dmn, "Unsupported action type %d\n", action_type);
-			return -EINVAL;
+			goto out_invalid_arg;
 		}
 
 		/* Check action duplication */
 		if (++action_type_set[action_type] > max_actions_type) {
 			mlx5dr_err(dmn, "Action type %d supports only max %d time(s)\n",
 				   action_type, max_actions_type);
-			return -EINVAL;
+			goto out_invalid_arg;
 		}
 
 		/* Check action state machine is valid */
 		if (dr_action_validate_and_get_next_state(action_domain,
 							  action_type,
 							  &state)) {
-			mlx5dr_err(dmn, "Invalid action (gvmi: %d, is_rx: %d) sequence provided:",
-				   attr.gvmi, rx_rule);
-			dr_action_print_sequence(dmn, actions, i);
+			mlx5dr_err(dmn, "Invalid action sequence provided\n");
 			return -EOPNOTSUPP;
 		}
 	}
@@ -752,13 +614,16 @@ int mlx5dr_actions_build_ste_arr(struct mlx5dr_matcher *matcher,
 	}
 
 	dr_actions_apply(dmn,
-			 nic_dmn->type,
+			 nic_dmn->ste_type,
 			 action_type_set,
 			 last_ste,
 			 &attr,
 			 new_hw_ste_arr_sz);
 
 	return 0;
+
+out_invalid_arg:
+	return -EINVAL;
 }
 
 static unsigned int action_size[DR_ACTION_TYP_MAX] = {
@@ -773,7 +638,6 @@ static unsigned int action_size[DR_ACTION_TYP_MAX] = {
 	[DR_ACTION_TYP_VPORT]        = sizeof(struct mlx5dr_action_vport),
 	[DR_ACTION_TYP_PUSH_VLAN]    = sizeof(struct mlx5dr_action_push_vlan),
 	[DR_ACTION_TYP_INSERT_HDR]   = sizeof(struct mlx5dr_action_reformat),
-	[DR_ACTION_TYP_REMOVE_HDR]   = sizeof(struct mlx5dr_action_reformat),
 	[DR_ACTION_TYP_SAMPLER]      = sizeof(struct mlx5dr_action_sampler),
 };
 
@@ -845,8 +709,7 @@ dec_ref:
 struct mlx5dr_action *
 mlx5dr_action_create_mult_dest_tbl(struct mlx5dr_domain *dmn,
 				   struct mlx5dr_action_dest *dests,
-				   u32 num_of_dests,
-				   bool ignore_flow_level)
+				   u32 num_of_dests)
 {
 	struct mlx5dr_cmd_flow_destination_hw_info *hw_dests;
 	struct mlx5dr_action **ref_actions;
@@ -913,8 +776,7 @@ mlx5dr_action_create_mult_dest_tbl(struct mlx5dr_domain *dmn,
 				      num_of_dests,
 				      reformat_req,
 				      &action->dest_tbl->fw_tbl.id,
-				      &action->dest_tbl->fw_tbl.group_id,
-				      ignore_flow_level);
+				      &action->dest_tbl->fw_tbl.group_id);
 	if (ret)
 		goto free_action;
 
@@ -1022,23 +884,11 @@ dr_action_verify_reformat_params(enum mlx5dr_action_type reformat_type,
 				 size_t data_sz,
 				 void *data)
 {
-	if (reformat_type == DR_ACTION_TYP_INSERT_HDR) {
-		if ((!data && data_sz) || (data && !data_sz) ||
-		    MLX5_CAP_GEN_2(dmn->mdev, max_reformat_insert_size) < data_sz ||
-		    MLX5_CAP_GEN_2(dmn->mdev, max_reformat_insert_offset) < reformat_param_1) {
-			mlx5dr_dbg(dmn, "Invalid reformat parameters for INSERT_HDR\n");
-			goto out_err;
-		}
-	} else if (reformat_type == DR_ACTION_TYP_REMOVE_HDR) {
-		if (data ||
-		    MLX5_CAP_GEN_2(dmn->mdev, max_reformat_remove_size) < data_sz ||
-		    MLX5_CAP_GEN_2(dmn->mdev, max_reformat_remove_offset) < reformat_param_1) {
-			mlx5dr_dbg(dmn, "Invalid reformat parameters for REMOVE_HDR\n");
-			goto out_err;
-		}
-	} else if (reformat_param_0 || reformat_param_1 ||
-		   reformat_type > DR_ACTION_TYP_REMOVE_HDR) {
-		mlx5dr_dbg(dmn, "Invalid reformat parameters\n");
+	if ((!data && data_sz) || (data && !data_sz) ||
+	    ((reformat_param_0 || reformat_param_1) &&
+	     reformat_type != DR_ACTION_TYP_INSERT_HDR) ||
+	    reformat_type > DR_ACTION_TYP_INSERT_HDR) {
+		mlx5dr_dbg(dmn, "Invalid reformat parameter!\n");
 		goto out_err;
 	}
 
@@ -1137,6 +987,7 @@ dr_action_create_reformat_action(struct mlx5dr_domain *dmn,
 		return 0;
 	}
 	case DR_ACTION_TYP_INSERT_HDR:
+	{
 		ret = mlx5dr_cmd_create_reformat_ctx(dmn->mdev,
 						     MLX5_REFORMAT_TYPE_INSERT_HDR,
 						     reformat_param_0,
@@ -1151,12 +1002,7 @@ dr_action_create_reformat_action(struct mlx5dr_domain *dmn,
 		action->reformat->param_0 = reformat_param_0;
 		action->reformat->param_1 = reformat_param_1;
 		return 0;
-	case DR_ACTION_TYP_REMOVE_HDR:
-		action->reformat->id = 0;
-		action->reformat->size = data_sz;
-		action->reformat->param_0 = reformat_param_0;
-		action->reformat->param_1 = reformat_param_1;
-		return 0;
+	}
 	default:
 		mlx5dr_info(dmn, "Reformat type is not supported %d\n", action->action_type);
 		return -EINVAL;
@@ -1812,7 +1658,6 @@ int mlx5dr_action_destroy(struct mlx5dr_action *action)
 		}
 		break;
 	case DR_ACTION_TYP_TNL_L2_TO_L2:
-	case DR_ACTION_TYP_REMOVE_HDR:
 		refcount_dec(&action->reformat->dmn->refcount);
 		break;
 	case DR_ACTION_TYP_TNL_L3_TO_L2:

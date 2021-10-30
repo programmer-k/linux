@@ -4,7 +4,6 @@
  * Copyright (c) 2020 周琰杰 (Zhou Yanjie) <zhouyanjie@wanyeetech.com>
  */
 
-#include <linux/bitfield.h>
 #include <linux/bitops.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
@@ -35,6 +34,8 @@
 /* bits within the OSTCCR register */
 #define OSTCCR_PRESCALE1_MASK	0x3
 #define OSTCCR_PRESCALE2_MASK	0xc
+#define OSTCCR_PRESCALE1_LSB	0
+#define OSTCCR_PRESCALE2_LSB	2
 
 /* bits within the OSTCR register */
 #define OSTCR_OST1CLR			BIT(0)
@@ -97,7 +98,7 @@ static unsigned long ingenic_ost_percpu_timer_recalc_rate(struct clk_hw *hw,
 
 	prescale = readl(ost_clk->ost->base + info->ostccr_reg);
 
-	prescale = FIELD_GET(OSTCCR_PRESCALE1_MASK, prescale);
+	prescale = (prescale & OSTCCR_PRESCALE1_MASK) >> OSTCCR_PRESCALE1_LSB;
 
 	return parent_rate >> (prescale * 2);
 }
@@ -111,7 +112,7 @@ static unsigned long ingenic_ost_global_timer_recalc_rate(struct clk_hw *hw,
 
 	prescale = readl(ost_clk->ost->base + info->ostccr_reg);
 
-	prescale = FIELD_GET(OSTCCR_PRESCALE2_MASK, prescale);
+	prescale = (prescale & OSTCCR_PRESCALE2_MASK) >> OSTCCR_PRESCALE2_LSB;
 
 	return parent_rate >> (prescale * 2);
 }
@@ -150,8 +151,7 @@ static int ingenic_ost_percpu_timer_set_rate(struct clk_hw *hw, unsigned long re
 	int val;
 
 	val = readl(ost_clk->ost->base + info->ostccr_reg);
-	val &= ~OSTCCR_PRESCALE1_MASK;
-	val |= FIELD_PREP(OSTCCR_PRESCALE1_MASK, prescale);
+	val = (val & ~OSTCCR_PRESCALE1_MASK) | (prescale << OSTCCR_PRESCALE1_LSB);
 	writel(val, ost_clk->ost->base + info->ostccr_reg);
 
 	return 0;
@@ -166,8 +166,7 @@ static int ingenic_ost_global_timer_set_rate(struct clk_hw *hw, unsigned long re
 	int val;
 
 	val = readl(ost_clk->ost->base + info->ostccr_reg);
-	val &= ~OSTCCR_PRESCALE2_MASK;
-	val |= FIELD_PREP(OSTCCR_PRESCALE2_MASK, prescale);
+	val = (val & ~OSTCCR_PRESCALE2_MASK) | (prescale << OSTCCR_PRESCALE2_LSB);
 	writel(val, ost_clk->ost->base + info->ostccr_reg);
 
 	return 0;

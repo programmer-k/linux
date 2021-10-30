@@ -198,11 +198,12 @@ void fuse_finish_open(struct inode *inode, struct file *file)
 	struct fuse_file *ff = file->private_data;
 	struct fuse_conn *fc = get_fuse_conn(inode);
 
+	if (!(ff->open_flags & FOPEN_KEEP_CACHE))
+		invalidate_inode_pages2(inode->i_mapping);
 	if (ff->open_flags & FOPEN_STREAM)
 		stream_open(inode, file);
 	else if (ff->open_flags & FOPEN_NONSEEKABLE)
 		nonseekable_open(inode, file);
-
 	if (fc->atomic_o_trunc && (file->f_flags & O_TRUNC)) {
 		struct fuse_inode *fi = get_fuse_inode(inode);
 
@@ -210,14 +211,10 @@ void fuse_finish_open(struct inode *inode, struct file *file)
 		fi->attr_version = atomic64_inc_return(&fc->attr_version);
 		i_size_write(inode, 0);
 		spin_unlock(&fi->lock);
-		truncate_pagecache(inode, 0);
 		fuse_invalidate_attr(inode);
 		if (fc->writeback_cache)
 			file_update_time(file);
-	} else if (!(ff->open_flags & FOPEN_KEEP_CACHE)) {
-		invalidate_inode_pages2(inode->i_mapping);
 	}
-
 	if ((file->f_mode & FMODE_WRITE) && fc->writeback_cache)
 		fuse_link_write_file(file);
 }
@@ -246,7 +243,7 @@ int fuse_open_common(struct inode *inode, struct file *file, bool isdir)
 	}
 
 	if (dax_truncate) {
-		filemap_invalidate_lock(inode->i_mapping);
+		down_write(&get_fuse_inode(inode)->i_mmap_sem);
 		err = fuse_dax_break_layouts(inode, 0, 0);
 		if (err)
 			goto out;
@@ -258,7 +255,7 @@ int fuse_open_common(struct inode *inode, struct file *file, bool isdir)
 
 out:
 	if (dax_truncate)
-		filemap_invalidate_unlock(inode->i_mapping);
+		up_write(&get_fuse_inode(inode)->i_mmap_sem);
 
 	if (is_wb_truncate | dax_truncate) {
 		fuse_release_nowrite(inode);
@@ -392,7 +389,6 @@ struct fuse_writepage_args {
 	struct list_head queue_entry;
 	struct fuse_writepage_args *next;
 	struct inode *inode;
-	struct fuse_sync_bucket *bucket;
 };
 
 static struct fuse_writepage_args *fuse_find_writeback(struct fuse_inode *fi,
@@ -1612,9 +1608,6 @@ static void fuse_writepage_free(struct fuse_writepage_args *wpa)
 	struct fuse_args_pages *ap = &wpa->ia.ap;
 	int i;
 
-	if (wpa->bucket)
-		fuse_sync_bucket_dec(wpa->bucket);
-
 	for (i = 0; i < ap->num_pages; i++)
 		__free_page(ap->pages[i]);
 
@@ -1820,7 +1813,8 @@ static void fuse_writepage_end(struct fuse_mount *fm, struct fuse_args *args,
 	fuse_writepage_free(wpa);
 }
 
-static struct fuse_file *__fuse_write_file_get(struct fuse_inode *fi)
+static struct fuse_file *__fuse_write_file_get(struct fuse_conn *fc,
+					       struct fuse_inode *fi)
 {
 	struct fuse_file *ff = NULL;
 
@@ -1835,20 +1829,22 @@ static struct fuse_file *__fuse_write_file_get(struct fuse_inode *fi)
 	return ff;
 }
 
-static struct fuse_file *fuse_write_file_get(struct fuse_inode *fi)
+static struct fuse_file *fuse_write_file_get(struct fuse_conn *fc,
+					     struct fuse_inode *fi)
 {
-	struct fuse_file *ff = __fuse_write_file_get(fi);
+	struct fuse_file *ff = __fuse_write_file_get(fc, fi);
 	WARN_ON(!ff);
 	return ff;
 }
 
 int fuse_write_inode(struct inode *inode, struct writeback_control *wbc)
 {
+	struct fuse_conn *fc = get_fuse_conn(inode);
 	struct fuse_inode *fi = get_fuse_inode(inode);
 	struct fuse_file *ff;
 	int err;
 
-	ff = __fuse_write_file_get(fi);
+	ff = __fuse_write_file_get(fc, fi);
 	err = fuse_flush_times(inode, ff);
 	if (ff)
 		fuse_file_put(ff, false, false);
@@ -1875,20 +1871,6 @@ static struct fuse_writepage_args *fuse_writepage_args_alloc(void)
 
 }
 
-static void fuse_writepage_add_to_bucket(struct fuse_conn *fc,
-					 struct fuse_writepage_args *wpa)
-{
-	if (!fc->sync_fs)
-		return;
-
-	rcu_read_lock();
-	/* Prevent resurrection of dead bucket in unlikely race with syncfs */
-	do {
-		wpa->bucket = rcu_dereference(fc->curr_bucket);
-	} while (unlikely(!atomic_inc_not_zero(&wpa->bucket->count)));
-	rcu_read_unlock();
-}
-
 static int fuse_writepage_locked(struct page *page)
 {
 	struct address_space *mapping = page->mapping;
@@ -1912,11 +1894,10 @@ static int fuse_writepage_locked(struct page *page)
 		goto err_free;
 
 	error = -EIO;
-	wpa->ia.ff = fuse_write_file_get(fi);
+	wpa->ia.ff = fuse_write_file_get(fc, fi);
 	if (!wpa->ia.ff)
 		goto err_nofile;
 
-	fuse_writepage_add_to_bucket(fc, wpa);
 	fuse_write_args_fill(&wpa->ia, wpa->ia.ff, page_offset(page), 0);
 
 	copy_highpage(tmp_page, page);
@@ -2132,7 +2113,7 @@ static int fuse_writepages_fill(struct page *page,
 
 	if (!data->ff) {
 		err = -EIO;
-		data->ff = fuse_write_file_get(fi);
+		data->ff = fuse_write_file_get(fc, fi);
 		if (!data->ff)
 			goto out_unlock;
 	}
@@ -2167,8 +2148,6 @@ static int fuse_writepages_fill(struct page *page,
 			__free_page(tmp_page);
 			goto out_unlock;
 		}
-		fuse_writepage_add_to_bucket(fc, wpa);
-
 		data->max_pages = 1;
 
 		ap = &wpa->ia.ap;
@@ -2902,7 +2881,7 @@ fuse_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 
 static int fuse_writeback_range(struct inode *inode, loff_t start, loff_t end)
 {
-	int err = filemap_write_and_wait_range(inode->i_mapping, start, -1);
+	int err = filemap_write_and_wait_range(inode->i_mapping, start, end);
 
 	if (!err)
 		fuse_sync_writes(inode);
@@ -2941,7 +2920,7 @@ static long fuse_file_fallocate(struct file *file, int mode, loff_t offset,
 	if (lock_inode) {
 		inode_lock(inode);
 		if (block_faults) {
-			filemap_invalidate_lock(inode->i_mapping);
+			down_write(&fi->i_mmap_sem);
 			err = fuse_dax_break_layouts(inode, 0, 0);
 			if (err)
 				goto out;
@@ -2997,7 +2976,7 @@ out:
 		clear_bit(FUSE_I_SIZE_UNSTABLE, &fi->state);
 
 	if (block_faults)
-		filemap_invalidate_unlock(inode->i_mapping);
+		up_write(&fi->i_mmap_sem);
 
 	if (lock_inode)
 		inode_unlock(inode);
@@ -3066,7 +3045,7 @@ static ssize_t __fuse_copy_file_range(struct file *file_in, loff_t pos_in,
 	 * modifications.  Yet this does give less guarantees than if the
 	 * copying was performed with write(2).
 	 *
-	 * To fix this a mapping->invalidate_lock could be used to prevent new
+	 * To fix this a i_mmap_sem style lock could be used to prevent new
 	 * faults while the copy is ongoing.
 	 */
 	err = fuse_writeback_range(inode_out, pos_out, pos_out + len - 1);

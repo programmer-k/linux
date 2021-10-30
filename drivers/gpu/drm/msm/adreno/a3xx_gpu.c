@@ -571,14 +571,13 @@ struct msm_gpu *a3xx_gpu_init(struct drm_device *dev)
 	}
 
 	icc_path = devm_of_icc_get(&pdev->dev, "gfx-mem");
-	if (IS_ERR(icc_path)) {
-		ret = PTR_ERR(icc_path);
+	ret = IS_ERR(icc_path);
+	if (ret)
 		goto fail;
-	}
 
 	ocmem_icc_path = devm_of_icc_get(&pdev->dev, "ocmem");
-	if (IS_ERR(ocmem_icc_path)) {
-		ret = PTR_ERR(ocmem_icc_path);
+	ret = IS_ERR(ocmem_icc_path);
+	if (ret) {
 		/* allow -ENODATA, ocmem icc is optional */
 		if (ret != -ENODATA)
 			goto fail;

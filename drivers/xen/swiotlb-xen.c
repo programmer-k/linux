@@ -100,32 +100,33 @@ static int is_xen_swiotlb_buffer(struct device *dev, dma_addr_t dma_addr)
 	 * in our domain. Therefore _only_ check address within our domain.
 	 */
 	if (pfn_valid(PFN_DOWN(paddr)))
-		return is_swiotlb_buffer(dev, paddr);
+		return is_swiotlb_buffer(paddr);
 	return 0;
 }
 
 static int xen_swiotlb_fixup(void *buf, unsigned long nslabs)
 {
-	int rc;
-	unsigned int order = get_order(IO_TLB_SEGSIZE << IO_TLB_SHIFT);
-	unsigned int i, dma_bits = order + PAGE_SHIFT;
+	int i, rc;
+	int dma_bits;
 	dma_addr_t dma_handle;
 	phys_addr_t p = virt_to_phys(buf);
 
-	BUILD_BUG_ON(IO_TLB_SEGSIZE & (IO_TLB_SEGSIZE - 1));
-	BUG_ON(nslabs % IO_TLB_SEGSIZE);
+	dma_bits = get_order(IO_TLB_SEGSIZE << IO_TLB_SHIFT) + PAGE_SHIFT;
 
 	i = 0;
 	do {
+		int slabs = min(nslabs - i, (unsigned long)IO_TLB_SEGSIZE);
+
 		do {
 			rc = xen_create_contiguous_region(
-				p + (i << IO_TLB_SHIFT), order,
+				p + (i << IO_TLB_SHIFT),
+				get_order(slabs << IO_TLB_SHIFT),
 				dma_bits, &dma_handle);
 		} while (rc && dma_bits++ < MAX_DMA_BITS);
 		if (rc)
 			return rc;
 
-		i += IO_TLB_SEGSIZE;
+		i += slabs;
 	} while (i < nslabs);
 	return 0;
 }
@@ -152,7 +153,9 @@ static const char *xen_swiotlb_error(enum xen_swiotlb_err err)
 	return "";
 }
 
-int xen_swiotlb_init(void)
+#define DEFAULT_NSLABS		ALIGN(SZ_64M >> IO_TLB_SHIFT, IO_TLB_SEGSIZE)
+
+int __ref xen_swiotlb_init(void)
 {
 	enum xen_swiotlb_err m_ret = XEN_SWIOTLB_UNKNOWN;
 	unsigned long bytes = swiotlb_size_or_default();
@@ -161,7 +164,7 @@ int xen_swiotlb_init(void)
 	int rc = -ENOMEM;
 	char *start;
 
-	if (io_tlb_default_mem.nslabs) {
+	if (io_tlb_default_mem != NULL) {
 		pr_warn("swiotlb buffer already initialized\n");
 		return -EEXIST;
 	}
@@ -182,7 +185,7 @@ retry:
 		order--;
 	}
 	if (!start)
-		goto exit;
+		goto error;
 	if (order != get_order(bytes)) {
 		pr_warn("Warning: only able to allocate %ld MB for software IO TLB\n",
 			(PAGE_SIZE << order) >> 20);
@@ -205,15 +208,15 @@ retry:
 	swiotlb_set_max_segment(PAGE_SIZE);
 	return 0;
 error:
-	if (nslabs > 1024 && repeat--) {
+	if (repeat--) {
 		/* Min is 2MB */
-		nslabs = max(1024UL, ALIGN(nslabs >> 1, IO_TLB_SEGSIZE));
-		bytes = nslabs << IO_TLB_SHIFT;
-		pr_info("Lowering to %luMB\n", bytes >> 20);
+		nslabs = max(1024UL, (nslabs >> 1));
+		pr_info("Lowering to %luMB\n",
+			(nslabs << IO_TLB_SHIFT) >> 20);
 		goto retry;
 	}
-exit:
 	pr_err("%s (rc:%d)\n", xen_swiotlb_error(m_ret), rc);
+	free_pages((unsigned long)start, order);
 	return rc;
 }
 
@@ -230,11 +233,10 @@ retry:
 	/*
 	 * Get IO TLB memory from any location.
 	 */
-	start = memblock_alloc(PAGE_ALIGN(bytes),
-			       IO_TLB_SEGSIZE << IO_TLB_SHIFT);
+	start = memblock_alloc(PAGE_ALIGN(bytes), PAGE_SIZE);
 	if (!start)
-		panic("%s: Failed to allocate %lu bytes\n",
-		      __func__, PAGE_ALIGN(bytes));
+		panic("%s: Failed to allocate %lu bytes align=0x%lx\n",
+		      __func__, PAGE_ALIGN(bytes), PAGE_SIZE);
 
 	/*
 	 * And replace that memory with pages under 4GB.
@@ -242,9 +244,9 @@ retry:
 	rc = xen_swiotlb_fixup(start, nslabs);
 	if (rc) {
 		memblock_free(__pa(start), PAGE_ALIGN(bytes));
-		if (nslabs > 1024 && repeat--) {
+		if (repeat--) {
 			/* Min is 2MB */
-			nslabs = max(1024UL, ALIGN(nslabs >> 1, IO_TLB_SEGSIZE));
+			nslabs = max(1024UL, (nslabs >> 1));
 			bytes = nslabs << IO_TLB_SHIFT;
 			pr_info("Lowering to %luMB\n", bytes >> 20);
 			goto retry;
@@ -252,7 +254,7 @@ retry:
 		panic("%s (rc:%d)", xen_swiotlb_error(XEN_SWIOTLB_EFIXUP), rc);
 	}
 
-	if (swiotlb_init_with_tbl(start, nslabs, true))
+	if (swiotlb_init_with_tbl(start, nslabs, false))
 		panic("Cannot allocate SWIOTLB buffer");
 	swiotlb_set_max_segment(PAGE_SIZE);
 }
@@ -372,7 +374,7 @@ static dma_addr_t xen_swiotlb_map_page(struct device *dev, struct page *page,
 	if (dma_capable(dev, dev_addr, size, true) &&
 	    !range_straddles_page_boundary(phys, size) &&
 		!xen_arch_need_swiotlb(dev, phys, dev_addr) &&
-		!is_swiotlb_force_bounce(dev))
+		swiotlb_force != SWIOTLB_FORCE)
 		goto done;
 
 	/*
@@ -507,7 +509,7 @@ xen_swiotlb_map_sg(struct device *dev, struct scatterlist *sgl, int nelems,
 out_unmap:
 	xen_swiotlb_unmap_sg(dev, sgl, i, dir, attrs | DMA_ATTR_SKIP_CPU_SYNC);
 	sg_dma_len(sgl) = 0;
-	return -EIO;
+	return 0;
 }
 
 static void
@@ -545,7 +547,7 @@ xen_swiotlb_sync_sg_for_device(struct device *dev, struct scatterlist *sgl,
 static int
 xen_swiotlb_dma_supported(struct device *hwdev, u64 mask)
 {
-	return xen_phys_to_dma(hwdev, io_tlb_default_mem.end - 1) <= mask;
+	return xen_phys_to_dma(hwdev, io_tlb_default_mem->end - 1) <= mask;
 }
 
 const struct dma_map_ops xen_swiotlb_dma_ops = {

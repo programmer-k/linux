@@ -176,14 +176,6 @@ static void irdma_set_flush_fields(struct irdma_sc_qp *qp,
 	case IRDMA_AE_LLP_RECEIVED_MPA_CRC_ERROR:
 		qp->flush_code = FLUSH_GENERAL_ERR;
 		break;
-	case IRDMA_AE_LLP_TOO_MANY_RETRIES:
-		qp->flush_code = FLUSH_RETRY_EXC_ERR;
-		break;
-	case IRDMA_AE_AMP_MWBIND_INVALID_RIGHTS:
-	case IRDMA_AE_AMP_MWBIND_BIND_DISABLED:
-	case IRDMA_AE_AMP_MWBIND_INVALID_BOUNDS:
-		qp->flush_code = FLUSH_MW_BIND_ERR;
-		break;
 	default:
 		qp->flush_code = FLUSH_FATAL_ERR;
 		break;
@@ -1497,7 +1489,7 @@ void irdma_reinitialize_ieq(struct irdma_sc_vsi *vsi)
 
 	irdma_puda_dele_rsrc(vsi, IRDMA_PUDA_RSRC_TYPE_IEQ, false);
 	if (irdma_initialize_ieq(iwdev)) {
-		iwdev->rf->reset = true;
+		iwdev->reset = true;
 		rf->gen_ops.request_reset(rf);
 	}
 }
@@ -1640,13 +1632,13 @@ void irdma_rt_deinit_hw(struct irdma_device *iwdev)
 	case IEQ_CREATED:
 		if (!iwdev->roce_mode)
 			irdma_puda_dele_rsrc(&iwdev->vsi, IRDMA_PUDA_RSRC_TYPE_IEQ,
-					     iwdev->rf->reset);
+					     iwdev->reset);
 		fallthrough;
 	case ILQ_CREATED:
 		if (!iwdev->roce_mode)
 			irdma_puda_dele_rsrc(&iwdev->vsi,
 					     IRDMA_PUDA_RSRC_TYPE_ILQ,
-					     iwdev->rf->reset);
+					     iwdev->reset);
 		break;
 	default:
 		ibdev_warn(&iwdev->ibdev, "bad init_state = %d\n", iwdev->init_state);

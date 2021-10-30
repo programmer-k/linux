@@ -80,7 +80,6 @@ struct qedi_endpoint {
 	u32 handle;
 	u32 fw_cid;
 	void __iomem *p_doorbell;
-	struct iscsi_db_data db_data;
 
 	/* Send queue management */
 	struct iscsi_wqe *sq;

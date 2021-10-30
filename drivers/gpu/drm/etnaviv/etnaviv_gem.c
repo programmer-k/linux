@@ -130,7 +130,8 @@ static int etnaviv_gem_mmap_obj(struct etnaviv_gem_object *etnaviv_obj,
 {
 	pgprot_t vm_page_prot;
 
-	vma->vm_flags |= VM_IO | VM_MIXEDMAP | VM_DONTEXPAND | VM_DONTDUMP;
+	vma->vm_flags &= ~VM_PFNMAP;
+	vma->vm_flags |= VM_MIXEDMAP;
 
 	vm_page_prot = vm_get_page_prot(vma->vm_flags);
 
@@ -153,11 +154,19 @@ static int etnaviv_gem_mmap_obj(struct etnaviv_gem_object *etnaviv_obj,
 	return 0;
 }
 
-static int etnaviv_gem_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+int etnaviv_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 {
-	struct etnaviv_gem_object *etnaviv_obj = to_etnaviv_bo(obj);
+	struct etnaviv_gem_object *obj;
+	int ret;
 
-	return etnaviv_obj->ops->mmap(etnaviv_obj, vma);
+	ret = drm_gem_mmap(filp, vma);
+	if (ret) {
+		DBG("mmap failed: %d", ret);
+		return ret;
+	}
+
+	obj = to_etnaviv_bo(vma->vm_private_data);
+	return obj->ops->mmap(obj, vma);
 }
 
 static vm_fault_t etnaviv_gem_fault(struct vm_fault *vmf)
@@ -294,7 +303,8 @@ struct etnaviv_vram_mapping *etnaviv_gem_mapping_get(
 		list_del(&mapping->obj_node);
 	}
 
-	mapping->context = etnaviv_iommu_context_get(mmu_context);
+	etnaviv_iommu_context_get(mmu_context);
+	mapping->context = mmu_context;
 	mapping->use = 1;
 
 	ret = etnaviv_iommu_map_gem(mmu_context, etnaviv_obj,
@@ -557,7 +567,6 @@ static const struct drm_gem_object_funcs etnaviv_gem_object_funcs = {
 	.unpin = etnaviv_gem_prime_unpin,
 	.get_sg_table = etnaviv_gem_prime_get_sg_table,
 	.vmap = etnaviv_gem_prime_vmap,
-	.mmap = etnaviv_gem_mmap,
 	.vm_ops = &vm_ops,
 };
 

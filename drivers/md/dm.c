@@ -8,7 +8,6 @@
 #include "dm-core.h"
 #include "dm-rq.h"
 #include "dm-uevent.h"
-#include "dm-ima.h"
 
 #include <linux/init.h>
 #include <linux/module.h>
@@ -262,12 +261,8 @@ static void (*_exits[])(void) = {
 static int __init dm_init(void)
 {
 	const int count = ARRAY_SIZE(_inits);
-	int r, i;
 
-#if (IS_ENABLED(CONFIG_IMA) && !IS_ENABLED(CONFIG_IMA_DISABLE_HTABLE))
-	DMWARN("CONFIG_IMA_DISABLE_HTABLE is disabled."
-	       " Duplicate IMA measurements will not be recorded in the IMA log.");
-#endif
+	int r, i;
 
 	for (i = 0; i < count; i++) {
 		r = _inits[i]();
@@ -276,7 +271,8 @@ static int __init dm_init(void)
 	}
 
 	return 0;
-bad:
+
+      bad:
 	while (i--)
 		_exits[i]();
 
@@ -496,17 +492,18 @@ static void start_io_acct(struct dm_io *io)
 				    false, 0, &io->stats_aux);
 }
 
-static void end_io_acct(struct mapped_device *md, struct bio *bio,
-			unsigned long start_time, struct dm_stats_aux *stats_aux)
+static void end_io_acct(struct dm_io *io)
 {
-	unsigned long duration = jiffies - start_time;
+	struct mapped_device *md = io->md;
+	struct bio *bio = io->orig_bio;
+	unsigned long duration = jiffies - io->start_time;
 
-	bio_end_io_acct(bio, start_time);
+	bio_end_io_acct(bio, io->start_time);
 
 	if (unlikely(dm_stats_used(&md->stats)))
 		dm_stats_account_io(&md->stats, bio_data_dir(bio),
 				    bio->bi_iter.bi_sector, bio_sectors(bio),
-				    true, duration, stats_aux);
+				    true, duration, &io->stats_aux);
 
 	/* nudge anyone waiting on suspend queue */
 	if (unlikely(wq_has_sleeper(&md->wait)))
@@ -653,7 +650,7 @@ static int open_table_device(struct table_device *td, dev_t dev,
 	}
 
 	td->dm_dev.bdev = bdev;
-	td->dm_dev.dax_dev = fs_dax_get_by_bdev(bdev);
+	td->dm_dev.dax_dev = dax_get_by_host(bdev->bd_disk->disk_name);
 	return 0;
 }
 
@@ -789,8 +786,6 @@ void dm_io_dec_pending(struct dm_io *io, blk_status_t error)
 	blk_status_t io_error;
 	struct bio *bio;
 	struct mapped_device *md = io->md;
-	unsigned long start_time = 0;
-	struct dm_stats_aux stats_aux;
 
 	/* Push-back supersedes any I/O errors */
 	if (unlikely(error)) {
@@ -822,10 +817,8 @@ void dm_io_dec_pending(struct dm_io *io, blk_status_t error)
 		}
 
 		io_error = io->status;
-		start_time = io->start_time;
-		stats_aux = io->stats_aux;
+		end_io_acct(io);
 		free_io(md, io);
-		end_io_acct(md, bio, start_time, &stats_aux);
 
 		if (io_error == BLK_STS_DM_REQUEUE)
 			return;
@@ -1700,13 +1693,14 @@ static void cleanup_mapped_device(struct mapped_device *md)
 		spin_lock(&_minor_lock);
 		md->disk->private_data = NULL;
 		spin_unlock(&_minor_lock);
-		if (dm_get_md_type(md) != DM_TYPE_NONE) {
-			dm_sysfs_exit(md);
-			del_gendisk(md->disk);
-		}
-		dm_queue_destroy_keyslot_manager(md->queue);
-		blk_cleanup_disk(md->disk);
+		del_gendisk(md->disk);
 	}
+
+	if (md->queue)
+		dm_queue_destroy_keyslot_manager(md->queue);
+
+	if (md->disk)
+		blk_cleanup_disk(md->disk);
 
 	cleanup_srcu_struct(&md->io_barrier);
 
@@ -1798,6 +1792,7 @@ static struct mapped_device *alloc_dev(int minor)
 			goto bad;
 	}
 
+	add_disk_no_queue_reg(md->disk);
 	format_dev_t(md->name, MKDEV(_major, minor));
 
 	md->wq = alloc_workqueue("kdmflush", WQ_MEM_RECLAIM, 0);
@@ -1998,13 +1993,18 @@ static struct dm_table *__unbind(struct mapped_device *md)
  */
 int dm_create(int minor, struct mapped_device **result)
 {
+	int r;
 	struct mapped_device *md;
 
 	md = alloc_dev(minor);
 	if (!md)
 		return -ENXIO;
 
-	dm_ima_reset_data(md);
+	r = dm_sysfs_init(md);
+	if (r) {
+		free_dev(md);
+		return r;
+	}
 
 	*result = md;
 	return 0;
@@ -2056,9 +2056,9 @@ EXPORT_SYMBOL_GPL(dm_get_queue_limits);
  */
 int dm_setup_md_queue(struct mapped_device *md, struct dm_table *t)
 {
-	enum dm_queue_mode type = dm_table_get_type(t);
-	struct queue_limits limits;
 	int r;
+	struct queue_limits limits;
+	enum dm_queue_mode type = dm_get_md_type(md);
 
 	switch (type) {
 	case DM_TYPE_REQUEST_BASED:
@@ -2086,14 +2086,8 @@ int dm_setup_md_queue(struct mapped_device *md, struct dm_table *t)
 	if (r)
 		return r;
 
-	add_disk(md->disk);
+	blk_register_queue(md->disk);
 
-	r = dm_sysfs_init(md);
-	if (r) {
-		del_gendisk(md->disk);
-		return r;
-	}
-	md->type = type;
 	return 0;
 }
 
@@ -2199,6 +2193,7 @@ static void __dm_destroy(struct mapped_device *md, bool wait)
 		DMWARN("%s: Forcibly removing mapped_device still in use! (%d users)",
 		       dm_device_name(md), atomic_read(&md->holders));
 
+	dm_sysfs_exit(md);
 	dm_table_destroy(__unbind(md));
 	free_dev(md);
 }

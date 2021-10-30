@@ -1856,7 +1856,7 @@ intel_sprite_plane_create(struct drm_i915_private *dev_priv,
 	zpos = sprite + 1;
 	drm_plane_create_zpos_immutable_property(&plane->base, zpos);
 
-	intel_plane_helper_add(plane);
+	drm_plane_helper_add(&plane->base, &intel_plane_helper_funcs);
 
 	return plane;
 

@@ -52,8 +52,7 @@ void mock_device_flush(struct drm_i915_private *i915)
 	do {
 		for_each_engine(engine, gt, id)
 			mock_engine_flush(engine);
-	} while (intel_gt_retire_requests_timeout(gt, MAX_SCHEDULE_TIMEOUT,
-						  NULL));
+	} while (intel_gt_retire_requests_timeout(gt, MAX_SCHEDULE_TIMEOUT));
 }
 
 static void mock_device_release(struct drm_device *dev)

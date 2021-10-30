@@ -2144,9 +2144,7 @@ static int gmac_set_ringparam(struct net_device *netdev,
 }
 
 static int gmac_get_coalesce(struct net_device *netdev,
-			     struct ethtool_coalesce *ecmd,
-			     struct kernel_ethtool_coalesce *kernel_coal,
-			     struct netlink_ext_ack *extack)
+			     struct ethtool_coalesce *ecmd)
 {
 	struct gemini_ethernet_port *port = netdev_priv(netdev);
 
@@ -2158,9 +2156,7 @@ static int gmac_get_coalesce(struct net_device *netdev,
 }
 
 static int gmac_set_coalesce(struct net_device *netdev,
-			     struct ethtool_coalesce *ecmd,
-			     struct kernel_ethtool_coalesce *kernel_coal,
-			     struct netlink_ext_ack *extack)
+			     struct ethtool_coalesce *ecmd)
 {
 	struct gemini_ethernet_port *port = netdev_priv(netdev);
 

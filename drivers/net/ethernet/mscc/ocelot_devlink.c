@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: (GPL-2.0 OR MIT)
-/* Copyright 2020-2021 NXP
+/* Copyright 2020-2021 NXP Semiconductors
  */
 #include <net/devlink.h>
 #include "ocelot.h"

@@ -4,7 +4,6 @@
  * Authors: Joonyoung Shim <jy0922.shim@samsung.com>
  */
 
-#include <linux/refcount.h>
 #include <linux/clk.h>
 #include <linux/component.h>
 #include <linux/delay.h>
@@ -209,7 +208,7 @@ struct g2d_cmdlist_userptr {
 	struct page		**pages;
 	unsigned int		npages;
 	struct sg_table		*sgt;
-	refcount_t		refcount;
+	atomic_t		refcount;
 	bool			in_pool;
 	bool			out_of_list;
 };
@@ -387,9 +386,9 @@ static void g2d_userptr_put_dma_addr(struct g2d_data *g2d,
 	if (force)
 		goto out;
 
-	refcount_dec(&g2d_userptr->refcount);
+	atomic_dec(&g2d_userptr->refcount);
 
-	if (refcount_read(&g2d_userptr->refcount) > 0)
+	if (atomic_read(&g2d_userptr->refcount) > 0)
 		return;
 
 	if (g2d_userptr->in_pool)
@@ -437,7 +436,7 @@ static dma_addr_t *g2d_userptr_get_dma_addr(struct g2d_data *g2d,
 			 * and different size.
 			 */
 			if (g2d_userptr->size == size) {
-				refcount_inc(&g2d_userptr->refcount);
+				atomic_inc(&g2d_userptr->refcount);
 				*obj = g2d_userptr;
 
 				return &g2d_userptr->dma_addr;
@@ -462,7 +461,7 @@ static dma_addr_t *g2d_userptr_get_dma_addr(struct g2d_data *g2d,
 	if (!g2d_userptr)
 		return ERR_PTR(-ENOMEM);
 
-	refcount_set(&g2d_userptr->refcount, 1);
+	atomic_set(&g2d_userptr->refcount, 1);
 	g2d_userptr->size = size;
 
 	start = userptr & PAGE_MASK;
@@ -898,14 +897,13 @@ static void g2d_runqueue_worker(struct work_struct *work)
 			ret = pm_runtime_resume_and_get(g2d->dev);
 			if (ret < 0) {
 				dev_err(g2d->dev, "failed to enable G2D device.\n");
-				goto out;
+				return;
 			}
 
 			g2d_dma_start(g2d, g2d->runqueue_node);
 		}
 	}
 
-out:
 	mutex_unlock(&g2d->runqueue_mutex);
 }
 
@@ -1449,6 +1447,7 @@ static const struct component_ops g2d_component_ops = {
 static int g2d_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct resource *res;
 	struct g2d_data *g2d;
 	int ret;
 
@@ -1490,7 +1489,9 @@ static int g2d_probe(struct platform_device *pdev)
 	clear_bit(G2D_BIT_SUSPEND_RUNQUEUE, &g2d->flags);
 	clear_bit(G2D_BIT_ENGINE_BUSY, &g2d->flags);
 
-	g2d->regs = devm_platform_ioremap_resource(pdev, 0);
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+
+	g2d->regs = devm_ioremap_resource(dev, res);
 	if (IS_ERR(g2d->regs)) {
 		ret = PTR_ERR(g2d->regs);
 		goto err_put_clk;

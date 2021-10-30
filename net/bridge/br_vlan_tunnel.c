@@ -158,28 +158,30 @@ void vlan_tunnel_deinit(struct net_bridge_vlan_group *vg)
 	rhashtable_destroy(&vg->tunnel_hash);
 }
 
-void br_handle_ingress_vlan_tunnel(struct sk_buff *skb,
-				   struct net_bridge_port *p,
-				   struct net_bridge_vlan_group *vg)
+int br_handle_ingress_vlan_tunnel(struct sk_buff *skb,
+				  struct net_bridge_port *p,
+				  struct net_bridge_vlan_group *vg)
 {
 	struct ip_tunnel_info *tinfo = skb_tunnel_info(skb);
 	struct net_bridge_vlan *vlan;
 
 	if (!vg || !tinfo)
-		return;
+		return 0;
 
 	/* if already tagged, ignore */
 	if (skb_vlan_tagged(skb))
-		return;
+		return 0;
 
 	/* lookup vid, given tunnel id */
 	vlan = br_vlan_tunnel_lookup(&vg->tunnel_hash, tinfo->key.tun_id);
 	if (!vlan)
-		return;
+		return 0;
 
 	skb_dst_drop(skb);
 
 	__vlan_hwaccel_put_tag(skb, p->br->vlan_proto, vlan->vid);
+
+	return 0;
 }
 
 int br_handle_egress_vlan_tunnel(struct sk_buff *skb,

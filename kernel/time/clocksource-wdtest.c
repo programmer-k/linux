@@ -19,8 +19,6 @@
 #include <linux/prandom.h>
 #include <linux/cpu.h>
 
-#include "tick-internal.h"
-
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Paul E. McKenney <paulmck@kernel.org>");
 
@@ -35,6 +33,9 @@ static u64 wdtest_jiffies_read(struct clocksource *cs)
 {
 	return (u64)jiffies;
 }
+
+/* Assume HZ > 100. */
+#define JIFFIES_SHIFT	8
 
 static struct clocksource clocksource_wdtest_jiffies = {
 	.name			= "wdtest-jiffies",

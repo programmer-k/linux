@@ -82,7 +82,7 @@ static int hyperv_setup_gen1(struct hyperv_drm_device *hv)
 		return -ENODEV;
 	}
 
-	ret = drm_aperture_remove_conflicting_pci_framebuffers(pdev, &hyperv_driver);
+	ret = drm_aperture_remove_conflicting_pci_framebuffers(pdev, "hypervdrmfb");
 	if (ret) {
 		drm_err(dev, "Not able to remove boot fb\n");
 		return ret;
@@ -127,7 +127,7 @@ static int hyperv_setup_gen2(struct hyperv_drm_device *hv,
 	drm_aperture_remove_conflicting_framebuffers(screen_info.lfb_base,
 						     screen_info.lfb_size,
 						     false,
-						     &hyperv_driver);
+						     "hypervdrmfb");
 
 	hv->fb_size = (unsigned long)hv->mmio_megabytes * 1024 * 1024;
 

@@ -584,7 +584,7 @@ static struct ctl_table nlm_sysctls[] = {
 		.data		= &nsm_use_hostnames,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dobool,
+		.proc_handler	= proc_dointvec,
 	},
 	{
 		.procname	= "nsm_local_state",
@@ -649,7 +649,6 @@ static int lockd_authenticate(struct svc_rqst *rqstp)
 	switch (rqstp->rq_authop->flavour) {
 		case RPC_AUTH_NULL:
 		case RPC_AUTH_UNIX:
-			rqstp->rq_auth_stat = rpc_auth_ok;
 			if (rqstp->rq_proc == 0)
 				return SVC_OK;
 			if (is_callback(rqstp->rq_proc)) {
@@ -660,7 +659,6 @@ static int lockd_authenticate(struct svc_rqst *rqstp)
 			}
 			return svc_set_client(rqstp);
 	}
-	rqstp->rq_auth_stat = rpc_autherr_badcred;
 	return SVC_DENIED;
 }
 

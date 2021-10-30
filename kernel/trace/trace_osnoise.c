@@ -1498,12 +1498,12 @@ static void stop_per_cpu_kthreads(void)
 {
 	int cpu;
 
-	cpus_read_lock();
+	get_online_cpus();
 
 	for_each_online_cpu(cpu)
 		stop_kthread(cpu);
 
-	cpus_read_unlock();
+	put_online_cpus();
 }
 
 /*
@@ -1548,10 +1548,10 @@ static int start_kthread(unsigned int cpu)
 static int start_per_cpu_kthreads(struct trace_array *tr)
 {
 	struct cpumask *current_mask = &save_cpumask;
-	int retval = 0;
+	int retval;
 	int cpu;
 
-	cpus_read_lock();
+	get_online_cpus();
 	/*
 	 * Run only on CPUs in which trace and osnoise are allowed to run.
 	 */
@@ -1568,13 +1568,13 @@ static int start_per_cpu_kthreads(struct trace_array *tr)
 		retval = start_kthread(cpu);
 		if (retval) {
 			stop_per_cpu_kthreads();
-			break;
+			return retval;
 		}
 	}
 
-	cpus_read_unlock();
+	put_online_cpus();
 
-	return retval;
+	return 0;
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
@@ -1590,7 +1590,7 @@ static void osnoise_hotplug_workfn(struct work_struct *dummy)
 		goto out_unlock_trace;
 
 	mutex_lock(&interface_lock);
-	cpus_read_lock();
+	get_online_cpus();
 
 	if (!cpumask_test_cpu(cpu, &osnoise_cpumask))
 		goto out_unlock;
@@ -1601,7 +1601,7 @@ static void osnoise_hotplug_workfn(struct work_struct *dummy)
 	start_kthread(cpu);
 
 out_unlock:
-	cpus_read_unlock();
+	put_online_cpus();
 	mutex_unlock(&interface_lock);
 out_unlock_trace:
 	mutex_unlock(&trace_types_lock);
@@ -1743,11 +1743,11 @@ osnoise_cpus_write(struct file *filp, const char __user *ubuf, size_t count,
 	/*
 	 * osnoise_cpumask is read by CPU hotplug operations.
 	 */
-	cpus_read_lock();
+	get_online_cpus();
 
 	cpumask_copy(&osnoise_cpumask, osnoise_cpumask_new);
 
-	cpus_read_unlock();
+	put_online_cpus();
 	mutex_unlock(&interface_lock);
 
 	if (running)

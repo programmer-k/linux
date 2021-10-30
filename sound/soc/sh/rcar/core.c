@@ -426,19 +426,19 @@ u32 rsnd_get_dalign(struct rsnd_mod *mod, struct rsnd_dai_stream *io)
 
 u32 rsnd_get_busif_shift(struct rsnd_dai_stream *io, struct rsnd_mod *mod)
 {
-	static const enum rsnd_mod_type playback_mods[] = {
+	enum rsnd_mod_type playback_mods[] = {
 		RSND_MOD_SRC,
 		RSND_MOD_CMD,
 		RSND_MOD_SSIU,
 	};
-	static const enum rsnd_mod_type capture_mods[] = {
+	enum rsnd_mod_type capture_mods[] = {
 		RSND_MOD_CMD,
 		RSND_MOD_SRC,
 		RSND_MOD_SSIU,
 	};
 	struct snd_pcm_runtime *runtime = rsnd_io_to_runtime(io);
 	struct rsnd_mod *tmod = NULL;
-	const enum rsnd_mod_type *mods =
+	enum rsnd_mod_type *mods =
 		rsnd_io_is_play(io) ?
 		playback_mods : capture_mods;
 	int i;

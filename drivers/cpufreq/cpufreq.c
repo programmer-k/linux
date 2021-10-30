@@ -1491,19 +1491,6 @@ static int cpufreq_online(unsigned int cpu)
 		write_lock_irqsave(&cpufreq_driver_lock, flags);
 		list_add(&policy->policy_list, &cpufreq_policy_list);
 		write_unlock_irqrestore(&cpufreq_driver_lock, flags);
-
-		/*
-		 * Register with the energy model before
-		 * sched_cpufreq_governor_change() is called, which will result
-		 * in rebuilding of the sched domains, which should only be done
-		 * once the energy model is properly initialized for the policy
-		 * first.
-		 *
-		 * Also, this should be called before the policy is registered
-		 * with cooling framework.
-		 */
-		if (cpufreq_driver->register_em)
-			cpufreq_driver->register_em(policy);
 	}
 
 	ret = cpufreq_init_policy(policy);
@@ -1516,6 +1503,10 @@ static int cpufreq_online(unsigned int cpu)
 	up_write(&policy->rwsem);
 
 	kobject_uevent(&policy->kobj, KOBJ_ADD);
+
+	/* Callback for handling stuff after policy is ready */
+	if (cpufreq_driver->ready)
+		cpufreq_driver->ready(policy);
 
 	if (cpufreq_thermal_control_enabled(cpufreq_driver))
 		policy->cdev = of_cpufreq_cooling_register(policy);
@@ -2663,18 +2654,18 @@ int cpufreq_boost_trigger_state(int state)
 	cpufreq_driver->boost_enabled = state;
 	write_unlock_irqrestore(&cpufreq_driver_lock, flags);
 
-	cpus_read_lock();
+	get_online_cpus();
 	for_each_active_policy(policy) {
 		ret = cpufreq_driver->set_boost(policy, state);
 		if (ret)
 			goto err_reset_state;
 	}
-	cpus_read_unlock();
+	put_online_cpus();
 
 	return 0;
 
 err_reset_state:
-	cpus_read_unlock();
+	put_online_cpus();
 
 	write_lock_irqsave(&cpufreq_driver_lock, flags);
 	cpufreq_driver->boost_enabled = !state;

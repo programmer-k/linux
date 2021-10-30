@@ -51,9 +51,6 @@ properties:
   interconnect-names:
     const: qup-core
 
-  iommus:
-    maxItems: 1
-
 required:
   - compatible
   - reg

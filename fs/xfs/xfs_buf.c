@@ -251,7 +251,7 @@ _xfs_buf_alloc(
 		return error;
 	}
 
-	bp->b_rhash_key = map[0].bm_bn;
+	bp->b_bn = map[0].bm_bn;
 	bp->b_length = 0;
 	for (i = 0; i < nmaps; i++) {
 		bp->b_maps[i].bm_bn = map[i].bm_bn;
@@ -315,6 +315,7 @@ xfs_buf_alloc_kmem(
 	struct xfs_buf	*bp,
 	xfs_buf_flags_t	flags)
 {
+	int		align_mask = xfs_buftarg_dma_alignment(bp->b_target);
 	xfs_km_flags_t	kmflag_mask = KM_NOFS;
 	size_t		size = BBTOB(bp->b_length);
 
@@ -322,7 +323,7 @@ xfs_buf_alloc_kmem(
 	if (!(flags & XBF_READ))
 		kmflag_mask |= KM_ZERO;
 
-	bp->b_addr = kmem_alloc(size, kmflag_mask);
+	bp->b_addr = kmem_alloc_io(size, align_mask, kmflag_mask);
 	if (!bp->b_addr)
 		return -ENOMEM;
 
@@ -459,7 +460,7 @@ _xfs_buf_obj_cmp(
 	 */
 	BUILD_BUG_ON(offsetof(struct xfs_buf_map, bm_bn) != 0);
 
-	if (bp->b_rhash_key != map->bm_bn)
+	if (bp->b_bn != map->bm_bn)
 		return 1;
 
 	if (unlikely(bp->b_length != map->bm_len)) {
@@ -481,7 +482,7 @@ static const struct rhashtable_params xfs_buf_hash_params = {
 	.min_size		= 32,	/* empty AGs have minimal footprint */
 	.nelem_hint		= 16,
 	.key_len		= sizeof(xfs_daddr_t),
-	.key_offset		= offsetof(struct xfs_buf, b_rhash_key),
+	.key_offset		= offsetof(struct xfs_buf, b_bn),
 	.head_offset		= offsetof(struct xfs_buf, b_rhash_head),
 	.automatic_shrinking	= true,
 	.obj_cmpfn		= _xfs_buf_obj_cmp,
@@ -813,7 +814,7 @@ xfs_buf_read_map(
 	 * buffer.
 	 */
 	if (error) {
-		if (!xfs_is_shutdown(target->bt_mount))
+		if (!XFS_FORCED_SHUTDOWN(target->bt_mount))
 			xfs_buf_ioerror_alert(bp, fa);
 
 		bp->b_flags &= ~XBF_DONE;
@@ -843,7 +844,7 @@ xfs_buf_readahead_map(
 {
 	struct xfs_buf		*bp;
 
-	if (bdi_read_congested(target->bt_bdev->bd_disk->bdi))
+	if (bdi_read_congested(target->bt_bdev->bd_bdi))
 		return;
 
 	xfs_buf_read_map(target, map, nmaps,
@@ -853,9 +854,7 @@ xfs_buf_readahead_map(
 
 /*
  * Read an uncached buffer from disk. Allocates and returns a locked
- * buffer containing the disk contents or nothing. Uncached buffers always have
- * a cache index of XFS_BUF_DADDR_NULL so we can easily determine if the buffer
- * is cached or uncached during fault diagnosis.
+ * buffer containing the disk contents or nothing.
  */
 int
 xfs_buf_read_uncached(
@@ -877,7 +876,7 @@ xfs_buf_read_uncached(
 
 	/* set up the buffer for a read IO */
 	ASSERT(bp->b_map_count == 1);
-	bp->b_rhash_key = XFS_BUF_DADDR_NULL;
+	bp->b_bn = XFS_BUF_DADDR_NULL;  /* always null for uncached buffers */
 	bp->b_maps[0].bm_bn = daddr;
 	bp->b_flags |= XBF_READ;
 	bp->b_ops = ops;
@@ -1146,7 +1145,7 @@ xfs_buf_ioerror_permanent(
 		return true;
 
 	/* At unmount we may treat errors differently */
-	if (xfs_is_unmounting(mp) && mp->m_fail_unmount)
+	if ((mp->m_flags & XFS_MOUNT_UNMOUNTING) && mp->m_fail_unmount)
 		return true;
 
 	return false;
@@ -1180,7 +1179,7 @@ xfs_buf_ioend_handle_error(
 	 * If we've already decided to shutdown the filesystem because of I/O
 	 * errors, there's no point in giving this a retry.
 	 */
-	if (xfs_is_shutdown(mp))
+	if (XFS_FORCED_SHUTDOWN(mp))
 		goto out_stale;
 
 	xfs_buf_ioerror_alert_ratelimited(bp);
@@ -1337,7 +1336,7 @@ xfs_buf_ioerror_alert(
 {
 	xfs_buf_alert_ratelimited(bp, "XFS: metadata IO error",
 		"metadata I/O error in \"%pS\" at daddr 0x%llx len %d error %d",
-				  func, (uint64_t)xfs_buf_daddr(bp),
+				  func, (uint64_t)XFS_BUF_ADDR(bp),
 				  bp->b_length, -bp->b_error);
 }
 
@@ -1515,18 +1514,17 @@ _xfs_buf_ioapply(
 						   SHUTDOWN_CORRUPT_INCORE);
 				return;
 			}
-		} else if (bp->b_rhash_key != XFS_BUF_DADDR_NULL) {
+		} else if (bp->b_bn != XFS_BUF_DADDR_NULL) {
 			struct xfs_mount *mp = bp->b_mount;
 
 			/*
 			 * non-crc filesystems don't attach verifiers during
 			 * log recovery, so don't warn for such filesystems.
 			 */
-			if (xfs_has_crc(mp)) {
+			if (xfs_sb_version_hascrc(&mp->m_sb)) {
 				xfs_warn(mp,
 					"%s: no buf ops on daddr 0x%llx len %d",
-					__func__, xfs_buf_daddr(bp),
-					bp->b_length);
+					__func__, bp->b_bn, bp->b_length);
 				xfs_hex_dump(bp->b_addr,
 						XFS_CORRUPTION_DUMP_LEN);
 				dump_stack();
@@ -1594,7 +1592,7 @@ __xfs_buf_submit(
 	ASSERT(!(bp->b_flags & _XBF_DELWRI_Q));
 
 	/* on shutdown we stale and complete the buffer immediately */
-	if (xfs_is_shutdown(bp->b_mount)) {
+	if (XFS_FORCED_SHUTDOWN(bp->b_mount)) {
 		xfs_buf_ioend_fail(bp);
 		return -EIO;
 	}
@@ -1796,7 +1794,7 @@ xfs_buftarg_drain(
 				xfs_buf_alert_ratelimited(bp,
 					"XFS: Corruption Alert",
 "Corruption Alert: Buffer at daddr 0x%llx had permanent write failures!",
-					(long long)xfs_buf_daddr(bp));
+					(long long)bp->b_bn);
 			}
 			xfs_buf_rele(bp);
 		}
@@ -1811,7 +1809,7 @@ xfs_buftarg_drain(
 	 * down the fs.
 	 */
 	if (write_fail) {
-		ASSERT(xfs_is_shutdown(btp->bt_mount));
+		ASSERT(XFS_FORCED_SHUTDOWN(btp->bt_mount));
 		xfs_alert(btp->bt_mount,
 	      "Please run xfs_repair to determine the extent of the problem.");
 	}
@@ -2304,7 +2302,7 @@ xfs_verify_magic(
 	struct xfs_mount	*mp = bp->b_mount;
 	int			idx;
 
-	idx = xfs_has_crc(mp);
+	idx = xfs_sb_version_hascrc(&mp->m_sb);
 	if (WARN_ON(!bp->b_ops || !bp->b_ops->magic[idx]))
 		return false;
 	return dmagic == bp->b_ops->magic[idx];
@@ -2322,7 +2320,7 @@ xfs_verify_magic16(
 	struct xfs_mount	*mp = bp->b_mount;
 	int			idx;
 
-	idx = xfs_has_crc(mp);
+	idx = xfs_sb_version_hascrc(&mp->m_sb);
 	if (WARN_ON(!bp->b_ops || !bp->b_ops->magic16[idx]))
 		return false;
 	return dmagic == bp->b_ops->magic16[idx];

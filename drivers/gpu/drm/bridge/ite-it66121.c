@@ -536,8 +536,6 @@ static int it66121_bridge_attach(struct drm_bridge *bridge,
 		return -EINVAL;
 
 	ret = drm_bridge_attach(bridge->encoder, ctx->next_bridge, bridge, flags);
-	if (ret)
-		return ret;
 
 	ret = regmap_write_bits(ctx->regmap, IT66121_CLK_BANK_REG,
 				IT66121_CLK_BANK_PWROFF_RCLK, 0);

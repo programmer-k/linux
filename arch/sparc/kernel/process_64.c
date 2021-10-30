@@ -9,6 +9,9 @@
 /*
  * This file handles the architecture-dependent parts of process handling..
  */
+
+#include <stdarg.h>
+
 #include <linux/errno.h>
 #include <linux/export.h>
 #include <linux/sched.h>
@@ -455,7 +458,7 @@ static unsigned long clone_stackframe(unsigned long csp, unsigned long psp)
 
 	distance = fp - psp;
 	rval = (csp - distance);
-	if (raw_copy_in_user((void __user *)rval, (void __user *)psp, distance))
+	if (copy_in_user((void __user *) rval, (void __user *) psp, distance))
 		rval = 0;
 	else if (!stack_64bit) {
 		if (put_user(((u32)csp),
@@ -515,7 +518,7 @@ void synchronize_user_stack(void)
 
 static void stack_unaligned(unsigned long sp)
 {
-	force_sig_fault(SIGBUS, BUS_ADRALN, (void __user *) sp);
+	force_sig_fault(SIGBUS, BUS_ADRALN, (void __user *) sp, 0);
 }
 
 static const char uwfault32[] = KERN_INFO \

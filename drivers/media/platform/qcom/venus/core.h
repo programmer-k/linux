@@ -234,7 +234,6 @@ struct venc_controls {
 	u32 h264_loop_filter_mode;
 	s32 h264_loop_filter_alpha;
 	s32 h264_loop_filter_beta;
-	u32 h264_8x8_transform;
 
 	u32 hevc_i_qp;
 	u32 hevc_p_qp;
@@ -257,7 +256,6 @@ struct venc_controls {
 
 	u32 header_mode;
 	bool aud_enable;
-	u32 intra_refresh_period;
 
 	struct {
 		u32 h264;

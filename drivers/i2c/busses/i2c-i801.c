@@ -110,7 +110,6 @@
 #include <linux/platform_device.h>
 #include <linux/platform_data/itco_wdt.h>
 #include <linux/pm_runtime.h>
-#include <linux/mutex.h>
 
 #if IS_ENABLED(CONFIG_I2C_MUX_GPIO) && defined CONFIG_DMI
 #include <linux/gpio/machine.h>
@@ -504,16 +503,19 @@ static int i801_transaction(struct i801_priv *priv, int xact)
 
 static int i801_block_transaction_by_block(struct i801_priv *priv,
 					   union i2c_smbus_data *data,
-					   char read_write, int command)
+					   char read_write, int command,
+					   int hwpec)
 {
-	int i, len, status, xact;
+	int i, len;
+	int status;
+	int xact = hwpec ? SMBHSTCNT_PEC_EN : 0;
 
 	switch (command) {
 	case I2C_SMBUS_BLOCK_PROC_CALL:
-		xact = I801_BLOCK_PROC_CALL;
+		xact |= I801_BLOCK_PROC_CALL;
 		break;
 	case I2C_SMBUS_BLOCK_DATA:
-		xact = I801_BLOCK_DATA;
+		xact |= I801_BLOCK_DATA;
 		break;
 	default:
 		return -EOPNOTSUPP;
@@ -559,6 +561,10 @@ static void i801_isr_byte_done(struct i801_priv *priv)
 					priv->len);
 				/* FIXME: Recover */
 				priv->len = I2C_SMBUS_BLOCK_MAX;
+			} else {
+				dev_dbg(&priv->pci_dev->dev,
+					"SMBus block read size is %d\n",
+					priv->len);
 			}
 			priv->data[-1] = priv->len;
 		}
@@ -659,7 +665,8 @@ static irqreturn_t i801_isr(int irq, void *dev_id)
  */
 static int i801_block_transaction_byte_by_byte(struct i801_priv *priv,
 					       union i2c_smbus_data *data,
-					       char read_write, int command)
+					       char read_write, int command,
+					       int hwpec)
 {
 	int i, len;
 	int smbcmd;
@@ -757,8 +764,9 @@ static int i801_set_block_buffer_mode(struct i801_priv *priv)
 }
 
 /* Block transaction function */
-static int i801_block_transaction(struct i801_priv *priv, union i2c_smbus_data *data,
-				  char read_write, int command)
+static int i801_block_transaction(struct i801_priv *priv,
+				  union i2c_smbus_data *data, char read_write,
+				  int command, int hwpec)
 {
 	int result = 0;
 	unsigned char hostc;
@@ -794,11 +802,11 @@ static int i801_block_transaction(struct i801_priv *priv, union i2c_smbus_data *
 	 && i801_set_block_buffer_mode(priv) == 0)
 		result = i801_block_transaction_by_block(priv, data,
 							 read_write,
-							 command);
+							 command, hwpec);
 	else
 		result = i801_block_transaction_byte_by_byte(priv, data,
 							     read_write,
-							     command);
+							     command, hwpec);
 
 	if (command == I2C_SMBUS_I2C_BLOCK_DATA
 	 && read_write == I2C_SMBUS_WRITE) {
@@ -909,7 +917,8 @@ static s32 i801_access(struct i2c_adapter *adap, u16 addr,
 		       SMBAUXCTL(priv));
 
 	if (block)
-		ret = i801_block_transaction(priv, data, read_write, size);
+		ret = i801_block_transaction(priv, data, read_write, size,
+					     hwpec);
 	else
 		ret = i801_transaction(priv, xact);
 
@@ -1489,11 +1498,12 @@ static const struct itco_wdt_platform_data spt_tco_platform_data = {
 	.version = 4,
 };
 
+static DEFINE_SPINLOCK(p2sb_spinlock);
+
 static struct platform_device *
 i801_add_tco_spt(struct i801_priv *priv, struct pci_dev *pci_dev,
 		 struct resource *tco_res)
 {
-	static DEFINE_MUTEX(p2sb_mutex);
 	struct resource *res;
 	unsigned int devfn;
 	u64 base64_addr;
@@ -1506,7 +1516,7 @@ i801_add_tco_spt(struct i801_priv *priv, struct pci_dev *pci_dev,
 	 * enumerated by the PCI subsystem, so we need to unhide/hide it
 	 * to lookup the P2SB BAR.
 	 */
-	mutex_lock(&p2sb_mutex);
+	spin_lock(&p2sb_spinlock);
 
 	devfn = PCI_DEVFN(PCI_SLOT(pci_dev->devfn), 1);
 
@@ -1524,7 +1534,7 @@ i801_add_tco_spt(struct i801_priv *priv, struct pci_dev *pci_dev,
 	/* Hide the P2SB device, if it was hidden before */
 	if (hidden)
 		pci_bus_write_config_byte(pci_dev->bus, devfn, 0xe1, hidden);
-	mutex_unlock(&p2sb_mutex);
+	spin_unlock(&p2sb_spinlock);
 
 	res = &tco_res[1];
 	if (pci_dev->device == PCI_DEVICE_ID_INTEL_DNV_SMBUS)
@@ -1624,7 +1634,7 @@ i801_acpi_io_handler(u32 function, acpi_physical_address address, u32 bits,
 		 * BIOS is accessing the host controller so prevent it from
 		 * suspending automatically from now on.
 		 */
-		pm_runtime_set_autosuspend_delay(&pdev->dev, -1);
+		pm_runtime_get_sync(&pdev->dev);
 	}
 
 	if ((function & ACPI_IO_MASK) == ACPI_READ)
@@ -1664,6 +1674,11 @@ static void i801_acpi_remove(struct i801_priv *priv)
 
 	acpi_remove_address_space_handler(adev->handle,
 		ACPI_ADR_SPACE_SYSTEM_IO, i801_acpi_io_handler);
+
+	mutex_lock(&priv->acpi_lock);
+	if (priv->acpi_reserved)
+		pm_runtime_put(&priv->pci_dev->dev);
+	mutex_unlock(&priv->acpi_lock);
 }
 #else
 static inline int i801_acpi_probe(struct i801_priv *priv) { return 0; }
@@ -1675,7 +1690,6 @@ static void i801_setup_hstcfg(struct i801_priv *priv)
 	unsigned char hstcfg = priv->original_hstcfg;
 
 	hstcfg &= ~SMBHSTCFG_I2C_EN;	/* SMBus timing */
-	hstcfg &= ~SMBHSTCNT_PEC_EN;	/* Disable software PEC */
 	hstcfg |= SMBHSTCFG_HST_EN;
 	pci_write_config_byte(priv->pci_dev, SMBHSTCFG, hstcfg);
 }

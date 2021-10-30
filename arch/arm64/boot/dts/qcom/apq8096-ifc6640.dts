@@ -92,14 +92,6 @@
 	status = "okay";
 };
 
-&hdmi {
-	status = "okay";
-};
-
-&hdmi_phy {
-	status = "okay";
-};
-
 &mdss {
 	status = "okay";
 };

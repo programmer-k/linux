@@ -428,32 +428,23 @@ int efx_xdp_tx_buffers(struct efx_nic *efx, int n, struct xdp_frame **xdpfs,
 	unsigned int len;
 	int space;
 	int cpu;
-	int i = 0;
-
-	if (unlikely(n && !xdpfs))
-		return -EINVAL;
-	if (unlikely(!n))
-		return 0;
+	int i;
 
 	cpu = raw_smp_processor_id();
-	if (unlikely(cpu >= efx->xdp_tx_queue_count))
+
+	if (!efx->xdp_tx_queue_count ||
+	    unlikely(cpu >= efx->xdp_tx_queue_count))
 		return -EINVAL;
 
 	tx_queue = efx->xdp_tx_queues[cpu];
 	if (unlikely(!tx_queue))
 		return -EINVAL;
 
-	if (efx->xdp_txq_queues_mode != EFX_XDP_TX_QUEUES_DEDICATED)
-		HARD_TX_LOCK(efx->net_dev, tx_queue->core_txq, cpu);
+	if (unlikely(n && !xdpfs))
+		return -EINVAL;
 
-	/* If we're borrowing net stack queues we have to handle stop-restart
-	 * or we might block the queue and it will be considered as frozen
-	 */
-	if (efx->xdp_txq_queues_mode == EFX_XDP_TX_QUEUES_BORROWED) {
-		if (netif_tx_queue_stopped(tx_queue->core_txq))
-			goto unlock;
-		efx_tx_maybe_stop_queue(tx_queue);
-	}
+	if (!n)
+		return 0;
 
 	/* Check for available space. We should never need multiple
 	 * descriptors per frame.
@@ -492,10 +483,6 @@ int efx_xdp_tx_buffers(struct efx_nic *efx, int n, struct xdp_frame **xdpfs,
 	/* Pass mapped frames to hardware. */
 	if (flush && i > 0)
 		efx_nic_push_buffers(tx_queue);
-
-unlock:
-	if (efx->xdp_txq_queues_mode != EFX_XDP_TX_QUEUES_DEDICATED)
-		HARD_TX_UNLOCK(efx->net_dev, tx_queue->core_txq);
 
 	return i == 0 ? -EIO : i;
 }

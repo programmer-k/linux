@@ -384,7 +384,13 @@ mshw0011_space_handler(u32 function, acpi_physical_address command,
 	if (ACPI_FAILURE(ret))
 		return ret;
 
-	if (!value64 || !i2c_acpi_get_i2c_resource(ares, &sb)) {
+	if (!value64 || ares->type != ACPI_RESOURCE_TYPE_SERIAL_BUS) {
+		ret = AE_BAD_PARAMETER;
+		goto err;
+	}
+
+	sb = &ares->data.i2c_serial_bus;
+	if (sb->type != ACPI_RESOURCE_SERIAL_TYPE_I2C) {
 		ret = AE_BAD_PARAMETER;
 		goto err;
 	}

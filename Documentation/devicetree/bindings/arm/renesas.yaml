@@ -238,29 +238,17 @@ properties:
           - const: renesas,r8a77961
 
       - description: Kingfisher (SBEV-RCAR-KF-M03)
-        oneOf:
-          - items:
-              - const: shimafuji,kingfisher
-              - enum:
-                  - renesas,h3ulcb
-                  - renesas,m3ulcb
-                  - renesas,m3nulcb
-              - enum:
-                  - renesas,r8a7795
-                  - renesas,r8a7796
-                  - renesas,r8a77961
-                  - renesas,r8a77965
-          - items:
-              - const: shimafuji,kingfisher
-              - enum:
-                  - renesas,h3ulcb
-                  - renesas,m3ulcb
-              - enum:
-                  - renesas,r8a779m1
-                  - renesas,r8a779m3
-              - enum:
-                  - renesas,r8a7795
-                  - renesas,r8a77961
+        items:
+          - const: shimafuji,kingfisher
+          - enum:
+              - renesas,h3ulcb
+              - renesas,m3ulcb
+              - renesas,m3nulcb
+          - enum:
+              - renesas,r8a7795
+              - renesas,r8a7796
+              - renesas,r8a77961
+              - renesas,r8a77965
 
       - description: R-Car M3-N (R8A77965)
         items:
@@ -307,22 +295,6 @@ properties:
               - renesas,falcon-breakout # Falcon BreakOut board (RTP0RC779A0BOB0010S)
           - const: renesas,falcon-cpu
           - const: renesas,r8a779a0
-
-      - description: R-Car H3e-2G (R8A779M1)
-        items:
-          - enum:
-              - renesas,h3ulcb      # H3ULCB (R-Car Starter Kit Premier)
-              - renesas,salvator-xs # Salvator-XS (Salvator-X 2nd version)
-          - const: renesas,r8a779m1
-          - const: renesas,r8a7795
-
-      - description: R-Car M3e-2G (R8A779M3)
-        items:
-          - enum:
-              - renesas,m3ulcb      # M3ULCB (R-Car Starter Kit Pro)
-              - renesas,salvator-xs # Salvator-XS (Salvator-X 2nd version)
-          - const: renesas,r8a779m3
-          - const: renesas,r8a77961
 
       - description: RZ/N1D (R9A06G032)
         items:

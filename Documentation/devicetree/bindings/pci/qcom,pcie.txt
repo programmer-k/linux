@@ -34,22 +34,22 @@
 - device_type:
 	Usage: required
 	Value type: <string>
-	Definition: Should be "pci". As specified in snps,dw-pcie.yaml
+	Definition: Should be "pci". As specified in designware-pcie.txt
 
 - #address-cells:
 	Usage: required
 	Value type: <u32>
-	Definition: Should be 3. As specified in snps,dw-pcie.yaml
+	Definition: Should be 3. As specified in designware-pcie.txt
 
 - #size-cells:
 	Usage: required
 	Value type: <u32>
-	Definition: Should be 2. As specified in snps,dw-pcie.yaml
+	Definition: Should be 2. As specified in designware-pcie.txt
 
 - ranges:
 	Usage: required
 	Value type: <prop-encoded-array>
-	Definition: As specified in snps,dw-pcie.yaml
+	Definition: As specified in designware-pcie.txt
 
 - interrupts:
 	Usage: required
@@ -64,17 +64,17 @@
 - #interrupt-cells:
 	Usage: required
 	Value type: <u32>
-	Definition: Should be 1. As specified in snps,dw-pcie.yaml
+	Definition: Should be 1. As specified in designware-pcie.txt
 
 - interrupt-map-mask:
 	Usage: required
 	Value type: <prop-encoded-array>
-	Definition: As specified in snps,dw-pcie.yaml
+	Definition: As specified in designware-pcie.txt
 
 - interrupt-map:
 	Usage: required
 	Value type: <prop-encoded-array>
-	Definition: As specified in snps,dw-pcie.yaml
+	Definition: As specified in designware-pcie.txt
 
 - clocks:
 	Usage: required

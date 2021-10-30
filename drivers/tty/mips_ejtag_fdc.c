@@ -1042,7 +1042,7 @@ err_destroy_ports:
 		dport = &priv->ports[nport];
 		tty_port_destroy(&dport->port);
 	}
-	tty_driver_kref_put(priv->driver);
+	put_tty_driver(priv->driver);
 	return ret;
 }
 

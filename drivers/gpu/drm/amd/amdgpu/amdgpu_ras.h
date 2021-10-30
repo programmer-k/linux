@@ -49,14 +49,10 @@ enum amdgpu_ras_block {
 	AMDGPU_RAS_BLOCK__MP0,
 	AMDGPU_RAS_BLOCK__MP1,
 	AMDGPU_RAS_BLOCK__FUSE,
-	AMDGPU_RAS_BLOCK__MPIO,
 
 	AMDGPU_RAS_BLOCK__LAST
 };
 
-extern const char *ras_block_string[];
-
-#define ras_block_str(i) (ras_block_string[i])
 #define AMDGPU_RAS_BLOCK_COUNT	AMDGPU_RAS_BLOCK__LAST
 #define AMDGPU_RAS_BLOCK_MASK	((1ULL << AMDGPU_RAS_BLOCK_COUNT) - 1)
 
@@ -310,6 +306,7 @@ struct ras_common_if {
 	enum amdgpu_ras_block block;
 	enum amdgpu_ras_error_type type;
 	uint32_t sub_block_index;
+	/* block name */
 	char name[32];
 };
 
@@ -321,7 +318,6 @@ struct amdgpu_ras {
 	/* sysfs */
 	struct device_attribute features_attr;
 	struct bin_attribute badpages_attr;
-	struct dentry *de_ras_eeprom_table;
 	/* block array */
 	struct ras_manager *objs;
 
@@ -421,7 +417,7 @@ struct ras_badpage {
 /* interfaces for IP */
 struct ras_fs_if {
 	struct ras_common_if head;
-	const char* sysfs_name;
+	char sysfs_name[32];
 	char debugfs_name[32];
 };
 
@@ -473,8 +469,8 @@ struct ras_debug_if {
  * 8: feature disable
  */
 
-#define amdgpu_ras_get_context(adev)		((adev)->psp.ras_context.ras)
-#define amdgpu_ras_set_context(adev, ras_con)	((adev)->psp.ras_context.ras = (ras_con))
+#define amdgpu_ras_get_context(adev)		((adev)->psp.ras.ras)
+#define amdgpu_ras_set_context(adev, ras_con)	((adev)->psp.ras.ras = (ras_con))
 
 /* check if ras is supported on block, say, sdma, gfx */
 static inline int amdgpu_ras_is_supported(struct amdgpu_device *adev,

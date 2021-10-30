@@ -7,10 +7,9 @@
  * Denis Ciocca <denis.ciocca@st.com>
  */
 
-#include <linux/acpi.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/mod_devicetable.h>
+#include <linux/slab.h>
 #include <linux/i2c.h>
 #include <linux/iio/iio.h>
 

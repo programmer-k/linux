@@ -11,6 +11,7 @@
 
 #undef DEBUG
 
+#include <stdarg.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/init.h>
@@ -639,9 +640,7 @@ static void __init early_reserve_mem(void)
 	}
 #endif /* CONFIG_BLK_DEV_INITRD */
 
-	if (!IS_ENABLED(CONFIG_PPC32))
-		return;
-
+#ifdef CONFIG_PPC32
 	/* 
 	 * Handle the case where we might be booting from an old kexec
 	 * image that setup the mem_rsvmap as pairs of 32-bit values
@@ -662,6 +661,7 @@ static void __init early_reserve_mem(void)
 		}
 		return;
 	}
+#endif
 }
 
 #ifdef CONFIG_PPC_TRANSACTIONAL_MEM

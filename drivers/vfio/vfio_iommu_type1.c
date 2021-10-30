@@ -612,17 +612,17 @@ static int vfio_wait(struct vfio_iommu *iommu)
 static int vfio_find_dma_valid(struct vfio_iommu *iommu, dma_addr_t start,
 			       size_t size, struct vfio_dma **dma_p)
 {
-	int ret = 0;
+	int ret;
 
 	do {
 		*dma_p = vfio_find_dma(iommu, start, size);
 		if (!*dma_p)
-			return -EINVAL;
+			ret = -EINVAL;
 		else if (!(*dma_p)->vaddr_invalid)
-			return ret;
+			ret = 0;
 		else
 			ret = vfio_wait(iommu);
-	} while (ret == WAITED);
+	} while (ret > 0);
 
 	return ret;
 }

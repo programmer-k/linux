@@ -114,7 +114,6 @@ static void vmw_resource_release(struct kref *kref)
 	    container_of(kref, struct vmw_resource, kref);
 	struct vmw_private *dev_priv = res->dev_priv;
 	int id;
-	int ret;
 	struct idr *idr = &dev_priv->res_idr[res->func->res_type];
 
 	spin_lock(&dev_priv->resource_lock);
@@ -123,8 +122,7 @@ static void vmw_resource_release(struct kref *kref)
 	if (res->backup) {
 		struct ttm_buffer_object *bo = &res->backup->base;
 
-		ret = ttm_bo_reserve(bo, false, false, NULL);
-		BUG_ON(ret);
+		ttm_bo_reserve(bo, false, false, NULL);
 		if (vmw_resource_mob_attached(res) &&
 		    res->func->unbind != NULL) {
 			struct ttm_validate_buffer val_buf;
@@ -353,7 +351,8 @@ int vmw_user_lookup_handle(struct vmw_private *dev_priv,
 static int vmw_resource_buf_alloc(struct vmw_resource *res,
 				  bool interruptible)
 {
-	unsigned long size = PFN_ALIGN(res->backup_size);
+	unsigned long size =
+		(res->backup_size + PAGE_SIZE - 1) & PAGE_MASK;
 	struct vmw_buffer_object *backup;
 	int ret;
 
@@ -1002,9 +1001,7 @@ int vmw_resource_pin(struct vmw_resource *res, bool interruptible)
 		if (res->backup) {
 			vbo = res->backup;
 
-			ret = ttm_bo_reserve(&vbo->base, interruptible, false, NULL);
-			if (ret)
-				goto out_no_validate;
+			ttm_bo_reserve(&vbo->base, interruptible, false, NULL);
 			if (!vbo->base.pin_count) {
 				ret = ttm_bo_validate
 					(&vbo->base,

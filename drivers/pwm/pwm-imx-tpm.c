@@ -382,12 +382,11 @@ static int pwm_imx_tpm_probe(struct platform_device *pdev)
 static int pwm_imx_tpm_remove(struct platform_device *pdev)
 {
 	struct imx_tpm_pwm_chip *tpm = platform_get_drvdata(pdev);
-
-	pwmchip_remove(&tpm->chip);
+	int ret = pwmchip_remove(&tpm->chip);
 
 	clk_disable_unprepare(tpm->clk);
 
-	return 0;
+	return ret;
 }
 
 static int __maybe_unused pwm_imx_tpm_suspend(struct device *dev)

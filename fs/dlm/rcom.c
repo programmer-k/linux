@@ -89,15 +89,22 @@ static int create_rcom_stateless(struct dlm_ls *ls, int to_nodeid, int type,
 	return 0;
 }
 
-static void send_rcom(struct dlm_mhandle *mh, struct dlm_rcom *rc)
+static void _send_rcom(struct dlm_ls *ls, struct dlm_rcom *rc)
 {
 	dlm_rcom_out(rc);
+}
+
+static void send_rcom(struct dlm_ls *ls, struct dlm_mhandle *mh,
+		      struct dlm_rcom *rc)
+{
+	_send_rcom(ls, rc);
 	dlm_midcomms_commit_mhandle(mh);
 }
 
-static void send_rcom_stateless(struct dlm_msg *msg, struct dlm_rcom *rc)
+static void send_rcom_stateless(struct dlm_ls *ls, struct dlm_msg *msg,
+				struct dlm_rcom *rc)
 {
-	dlm_rcom_out(rc);
+	_send_rcom(ls, rc);
 	dlm_lowcomms_commit_msg(msg);
 	dlm_lowcomms_put_msg(msg);
 }
@@ -197,7 +204,7 @@ retry:
 	allow_sync_reply(ls, &rc->rc_id);
 	memset(ls->ls_recover_buf, 0, DLM_MAX_SOCKET_BUFSIZE);
 
-	send_rcom_stateless(msg, rc);
+	send_rcom_stateless(ls, msg, rc);
 
 	error = dlm_wait_function(ls, &rcom_response);
 	disallow_sync_reply(ls);
@@ -280,7 +287,7 @@ static void receive_rcom_status(struct dlm_ls *ls, struct dlm_rcom *rc_in)
 	spin_unlock(&ls->ls_recover_lock);
 
  do_send:
-	send_rcom_stateless(msg, rc);
+	send_rcom_stateless(ls, msg, rc);
 }
 
 static void receive_sync_reply(struct dlm_ls *ls, struct dlm_rcom *rc_in)
@@ -320,7 +327,7 @@ retry:
 	allow_sync_reply(ls, &rc->rc_id);
 	memset(ls->ls_recover_buf, 0, DLM_MAX_SOCKET_BUFSIZE);
 
-	send_rcom_stateless(msg, rc);
+	send_rcom_stateless(ls, msg, rc);
 
 	error = dlm_wait_function(ls, &rcom_response);
 	disallow_sync_reply(ls);
@@ -349,7 +356,7 @@ static void receive_rcom_names(struct dlm_ls *ls, struct dlm_rcom *rc_in)
 
 	dlm_copy_master_names(ls, rc_in->rc_buf, inlen, rc->rc_buf, outlen,
 			      nodeid);
-	send_rcom_stateless(msg, rc);
+	send_rcom_stateless(ls, msg, rc);
 }
 
 int dlm_send_rcom_lookup(struct dlm_rsb *r, int dir_nodeid)
@@ -366,7 +373,7 @@ int dlm_send_rcom_lookup(struct dlm_rsb *r, int dir_nodeid)
 	memcpy(rc->rc_buf, r->res_name, r->res_length);
 	rc->rc_id = (unsigned long) r->res_id;
 
-	send_rcom(mh, rc);
+	send_rcom(ls, mh, rc);
  out:
 	return error;
 }
@@ -397,7 +404,7 @@ static void receive_rcom_lookup(struct dlm_ls *ls, struct dlm_rcom *rc_in)
 	rc->rc_id = rc_in->rc_id;
 	rc->rc_seq_reply = rc_in->rc_seq;
 
-	send_rcom(mh, rc);
+	send_rcom(ls, mh, rc);
 }
 
 static void receive_rcom_lookup_reply(struct dlm_ls *ls, struct dlm_rcom *rc_in)
@@ -454,7 +461,7 @@ int dlm_send_rcom_lock(struct dlm_rsb *r, struct dlm_lkb *lkb)
 	pack_rcom_lock(r, lkb, rl);
 	rc->rc_id = (unsigned long) r;
 
-	send_rcom(mh, rc);
+	send_rcom(ls, mh, rc);
  out:
 	return error;
 }
@@ -480,7 +487,7 @@ static void receive_rcom_lock(struct dlm_ls *ls, struct dlm_rcom *rc_in)
 	rc->rc_id = rc_in->rc_id;
 	rc->rc_seq_reply = rc_in->rc_seq;
 
-	send_rcom(mh, rc);
+	send_rcom(ls, mh, rc);
 }
 
 /* If the lockspace doesn't exist then still send a status message

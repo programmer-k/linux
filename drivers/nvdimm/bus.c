@@ -108,7 +108,7 @@ static int nvdimm_bus_probe(struct device *dev)
 	return rc;
 }
 
-static void nvdimm_bus_remove(struct device *dev)
+static int nvdimm_bus_remove(struct device *dev)
 {
 	struct nd_device_driver *nd_drv = to_nd_device_driver(dev->driver);
 	struct module *provider = to_bus_provider(dev);
@@ -123,6 +123,7 @@ static void nvdimm_bus_remove(struct device *dev)
 	dev_dbg(&nvdimm_bus->dev, "%s.remove(%s)\n", dev->driver->name,
 			dev_name(dev));
 	module_put(provider);
+	return 0;
 }
 
 static void nvdimm_bus_shutdown(struct device *dev)

@@ -21,7 +21,6 @@ select:
       contains:
         enum:
           - snps,dwmac
-          - snps,dwmac-3.40a
           - snps,dwmac-3.50a
           - snps,dwmac-3.610
           - snps,dwmac-3.70a
@@ -77,7 +76,6 @@ properties:
         - rockchip,rk3399-gmac
         - rockchip,rv1108-gmac
         - snps,dwmac
-        - snps,dwmac-3.40a
         - snps,dwmac-3.50a
         - snps,dwmac-3.610
         - snps,dwmac-3.70a

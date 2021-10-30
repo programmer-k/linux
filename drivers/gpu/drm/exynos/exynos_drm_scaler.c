@@ -485,6 +485,7 @@ static const struct component_ops scaler_component_ops = {
 static int scaler_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct resource	*regs_res;
 	struct scaler_context *scaler;
 	int irq;
 	int ret, i;
@@ -497,7 +498,8 @@ static int scaler_probe(struct platform_device *pdev)
 		(struct scaler_data *)of_device_get_match_data(dev);
 
 	scaler->dev = dev;
-	scaler->regs = devm_platform_ioremap_resource(pdev, 0);
+	regs_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	scaler->regs = devm_ioremap_resource(dev, regs_res);
 	if (IS_ERR(scaler->regs))
 		return PTR_ERR(scaler->regs);
 

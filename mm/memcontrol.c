@@ -103,11 +103,6 @@ static bool do_memsw_account(void)
 	return !cgroup_subsys_on_dfl(memory_cgrp_subsys) && !cgroup_memory_noswap;
 }
 
-/* memcg and lruvec stats flushing */
-static void flush_memcg_stats_dwork(struct work_struct *w);
-static DECLARE_DEFERRABLE_WORK(stats_flush_dwork, flush_memcg_stats_dwork);
-static DEFINE_SPINLOCK(stats_flush_lock);
-
 #define THRESHOLDS_EVENTS_TARGET 128
 #define SOFTLIMIT_EVENTS_TARGET 1024
 
@@ -253,9 +248,9 @@ struct vmpressure *memcg_to_vmpressure(struct mem_cgroup *memcg)
 	return &memcg->vmpressure;
 }
 
-struct mem_cgroup *vmpressure_to_memcg(struct vmpressure *vmpr)
+struct cgroup_subsys_state *vmpressure_to_css(struct vmpressure *vmpr)
 {
-	return container_of(vmpr, struct mem_cgroup, vmpressure);
+	return &container_of(vmpr, struct mem_cgroup, vmpressure)->css;
 }
 
 #ifdef CONFIG_MEMCG_KMEM
@@ -651,6 +646,17 @@ void __mod_memcg_state(struct mem_cgroup *memcg, int idx, int val)
 }
 
 /* idx can be of type enum memcg_stat_item or node_stat_item. */
+static unsigned long memcg_page_state(struct mem_cgroup *memcg, int idx)
+{
+	long x = READ_ONCE(memcg->vmstats.state[idx]);
+#ifdef CONFIG_SMP
+	if (x < 0)
+		x = 0;
+#endif
+	return x;
+}
+
+/* idx can be of type enum memcg_stat_item or node_stat_item. */
 static unsigned long memcg_page_state_local(struct mem_cgroup *memcg, int idx)
 {
 	long x = 0;
@@ -665,11 +671,23 @@ static unsigned long memcg_page_state_local(struct mem_cgroup *memcg, int idx)
 	return x;
 }
 
+static struct mem_cgroup_per_node *
+parent_nodeinfo(struct mem_cgroup_per_node *pn, int nid)
+{
+	struct mem_cgroup *parent;
+
+	parent = parent_mem_cgroup(pn->memcg);
+	if (!parent)
+		return NULL;
+	return parent->nodeinfo[nid];
+}
+
 void __mod_memcg_lruvec_state(struct lruvec *lruvec, enum node_stat_item idx,
 			      int val)
 {
 	struct mem_cgroup_per_node *pn;
 	struct mem_cgroup *memcg;
+	long x, threshold = MEMCG_CHARGE_BATCH;
 
 	pn = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
 	memcg = pn->memcg;
@@ -678,7 +696,21 @@ void __mod_memcg_lruvec_state(struct lruvec *lruvec, enum node_stat_item idx,
 	__mod_memcg_state(memcg, idx, val);
 
 	/* Update lruvec */
-	__this_cpu_add(pn->lruvec_stats_percpu->state[idx], val);
+	__this_cpu_add(pn->lruvec_stat_local->count[idx], val);
+
+	if (vmstat_item_in_bytes(idx))
+		threshold <<= PAGE_SHIFT;
+
+	x = val + __this_cpu_read(pn->lruvec_stat_cpu->count[idx]);
+	if (unlikely(abs(x) > threshold)) {
+		pg_data_t *pgdat = lruvec_pgdat(lruvec);
+		struct mem_cgroup_per_node *pi;
+
+		for (pi = pn; pi; pi = parent_nodeinfo(pi, pgdat->node_id))
+			atomic_long_add(x, &pi->lruvec_stat[idx]);
+		x = 0;
+	}
+	__this_cpu_write(pn->lruvec_stat_cpu->count[idx], x);
 }
 
 /**
@@ -873,7 +905,7 @@ EXPORT_SYMBOL(mem_cgroup_from_task);
 
 static __always_inline struct mem_cgroup *active_memcg(void)
 {
-	if (!in_task())
+	if (in_interrupt())
 		return this_cpu_read(int_active_memcg);
 	else
 		return current->active_memcg;
@@ -936,7 +968,7 @@ static __always_inline bool memcg_kmem_bypass(void)
 		return false;
 
 	/* Memcg to charge can't be determined. */
-	if (!in_task() || !current->mm || (current->flags & PF_KTHREAD))
+	if (in_interrupt() || !current->mm || (current->flags & PF_KTHREAD))
 		return true;
 
 	return false;
@@ -2173,9 +2205,8 @@ static void drain_local_stock(struct work_struct *dummy)
 	unsigned long flags;
 
 	/*
-	 * The only protection from cpu hotplug (memcg_hotplug_cpu_dead) vs.
-	 * drain_stock races is that we always operate on local CPU stock
-	 * here with IRQ disabled
+	 * The only protection from memory hotplug vs. drain_stock races is
+	 * that we always operate on local CPU stock here with IRQ disabled
 	 */
 	local_irq_save(flags);
 
@@ -2242,7 +2273,7 @@ static void drain_all_stock(struct mem_cgroup *root_memcg)
 		if (memcg && stock->nr_pages &&
 		    mem_cgroup_is_descendant(memcg, root_memcg))
 			flush = true;
-		else if (obj_stock_flush_required(stock, root_memcg))
+		if (obj_stock_flush_required(stock, root_memcg))
 			flush = true;
 		rcu_read_unlock();
 
@@ -2258,12 +2289,39 @@ static void drain_all_stock(struct mem_cgroup *root_memcg)
 	mutex_unlock(&percpu_charge_mutex);
 }
 
+static void memcg_flush_lruvec_page_state(struct mem_cgroup *memcg, int cpu)
+{
+	int nid;
+
+	for_each_node(nid) {
+		struct mem_cgroup_per_node *pn = memcg->nodeinfo[nid];
+		unsigned long stat[NR_VM_NODE_STAT_ITEMS];
+		struct batched_lruvec_stat *lstatc;
+		int i;
+
+		lstatc = per_cpu_ptr(pn->lruvec_stat_cpu, cpu);
+		for (i = 0; i < NR_VM_NODE_STAT_ITEMS; i++) {
+			stat[i] = lstatc->count[i];
+			lstatc->count[i] = 0;
+		}
+
+		do {
+			for (i = 0; i < NR_VM_NODE_STAT_ITEMS; i++)
+				atomic_long_add(stat[i], &pn->lruvec_stat[i]);
+		} while ((pn = parent_nodeinfo(pn, nid)));
+	}
+}
+
 static int memcg_hotplug_cpu_dead(unsigned int cpu)
 {
 	struct memcg_stock_pcp *stock;
+	struct mem_cgroup *memcg;
 
 	stock = &per_cpu(memcg_stock, cpu);
 	drain_stock(stock);
+
+	for_each_mem_cgroup(memcg)
+		memcg_flush_lruvec_page_state(memcg, cpu);
 
 	return 0;
 }
@@ -4058,7 +4116,7 @@ static int mem_cgroup_swappiness_write(struct cgroup_subsys_state *css,
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 
-	if (val > 200)
+	if (val > 100)
 		return -EINVAL;
 
 	if (!mem_cgroup_is_root(memcg))
@@ -4610,7 +4668,7 @@ void mem_cgroup_flush_foreign(struct bdi_writeback *wb)
 		    atomic_read(&frn->done.cnt) == 1) {
 			frn->at = 0;
 			trace_flush_foreign(wb, frn->bdi_id, frn->memcg_id);
-			cgroup_writeback_by_id(frn->bdi_id, frn->memcg_id,
+			cgroup_writeback_by_id(frn->bdi_id, frn->memcg_id, 0,
 					       WB_REASON_FOREIGN_FLUSH,
 					       &frn->done);
 		}
@@ -4834,9 +4892,9 @@ static ssize_t memcg_write_event_control(struct kernfs_open_file *of,
 
 	vfs_poll(efile.file, &event->pt);
 
-	spin_lock_irq(&memcg->event_list_lock);
+	spin_lock(&memcg->event_list_lock);
 	list_add(&event->list, &memcg->event_list);
-	spin_unlock_irq(&memcg->event_list_lock);
+	spin_unlock(&memcg->event_list_lock);
 
 	fdput(cfile);
 	fdput(efile);
@@ -5071,9 +5129,17 @@ static int alloc_mem_cgroup_per_node_info(struct mem_cgroup *memcg, int node)
 	if (!pn)
 		return 1;
 
-	pn->lruvec_stats_percpu = alloc_percpu_gfp(struct lruvec_stats_percpu,
-						   GFP_KERNEL_ACCOUNT);
-	if (!pn->lruvec_stats_percpu) {
+	pn->lruvec_stat_local = alloc_percpu_gfp(struct lruvec_stat,
+						 GFP_KERNEL_ACCOUNT);
+	if (!pn->lruvec_stat_local) {
+		kfree(pn);
+		return 1;
+	}
+
+	pn->lruvec_stat_cpu = alloc_percpu_gfp(struct batched_lruvec_stat,
+					       GFP_KERNEL_ACCOUNT);
+	if (!pn->lruvec_stat_cpu) {
+		free_percpu(pn->lruvec_stat_local);
 		kfree(pn);
 		return 1;
 	}
@@ -5094,7 +5160,8 @@ static void free_mem_cgroup_per_node_info(struct mem_cgroup *memcg, int node)
 	if (!pn)
 		return;
 
-	free_percpu(pn->lruvec_stats_percpu);
+	free_percpu(pn->lruvec_stat_cpu);
+	free_percpu(pn->lruvec_stat_local);
 	kfree(pn);
 }
 
@@ -5110,7 +5177,15 @@ static void __mem_cgroup_free(struct mem_cgroup *memcg)
 
 static void mem_cgroup_free(struct mem_cgroup *memcg)
 {
+	int cpu;
+
 	memcg_wb_domain_exit(memcg);
+	/*
+	 * Flush percpu lruvec stats to guarantee the value
+	 * correctness on parent's and all ancestor levels.
+	 */
+	for_each_online_cpu(cpu)
+		memcg_flush_lruvec_page_state(memcg, cpu);
 	__mem_cgroup_free(memcg);
 }
 
@@ -5246,10 +5321,6 @@ static int mem_cgroup_css_online(struct cgroup_subsys_state *css)
 	/* Online state pins memcg ID, memcg ID pins CSS */
 	refcount_set(&memcg->id.ref, 1);
 	css_get(css);
-
-	if (unlikely(mem_cgroup_is_root(memcg)))
-		queue_delayed_work(system_unbound_wq, &stats_flush_dwork,
-				   2UL*HZ);
 	return 0;
 }
 
@@ -5263,12 +5334,12 @@ static void mem_cgroup_css_offline(struct cgroup_subsys_state *css)
 	 * Notify userspace about cgroup removing only after rmdir of cgroup
 	 * directory to avoid race between userspace and kernelspace.
 	 */
-	spin_lock_irq(&memcg->event_list_lock);
+	spin_lock(&memcg->event_list_lock);
 	list_for_each_entry_safe(event, tmp, &memcg->event_list, list) {
 		list_del_init(&event->list);
 		schedule_work(&event->remove);
 	}
-	spin_unlock_irq(&memcg->event_list_lock);
+	spin_unlock(&memcg->event_list_lock);
 
 	page_counter_set_min(&memcg->memory, 0);
 	page_counter_set_low(&memcg->memory, 0);
@@ -5341,28 +5412,13 @@ static void mem_cgroup_css_reset(struct cgroup_subsys_state *css)
 	memcg_wb_domain_size_changed(memcg);
 }
 
-void mem_cgroup_flush_stats(void)
-{
-	if (!spin_trylock(&stats_flush_lock))
-		return;
-
-	cgroup_rstat_flush_irqsafe(root_mem_cgroup->css.cgroup);
-	spin_unlock(&stats_flush_lock);
-}
-
-static void flush_memcg_stats_dwork(struct work_struct *w)
-{
-	mem_cgroup_flush_stats();
-	queue_delayed_work(system_unbound_wq, &stats_flush_dwork, 2UL*HZ);
-}
-
 static void mem_cgroup_css_rstat_flush(struct cgroup_subsys_state *css, int cpu)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 	struct mem_cgroup *parent = parent_mem_cgroup(memcg);
 	struct memcg_vmstats_percpu *statc;
 	long delta, v;
-	int i, nid;
+	int i;
 
 	statc = per_cpu_ptr(memcg->vmstats_percpu, cpu);
 
@@ -5409,36 +5465,6 @@ static void mem_cgroup_css_rstat_flush(struct cgroup_subsys_state *css, int cpu)
 		memcg->vmstats.events[i] += delta;
 		if (parent)
 			parent->vmstats.events_pending[i] += delta;
-	}
-
-	for_each_node_state(nid, N_MEMORY) {
-		struct mem_cgroup_per_node *pn = memcg->nodeinfo[nid];
-		struct mem_cgroup_per_node *ppn = NULL;
-		struct lruvec_stats_percpu *lstatc;
-
-		if (parent)
-			ppn = parent->nodeinfo[nid];
-
-		lstatc = per_cpu_ptr(pn->lruvec_stats_percpu, cpu);
-
-		for (i = 0; i < NR_VM_NODE_STAT_ITEMS; i++) {
-			delta = pn->lruvec_stats.state_pending[i];
-			if (delta)
-				pn->lruvec_stats.state_pending[i] = 0;
-
-			v = READ_ONCE(lstatc->state[i]);
-			if (v != lstatc->state_prev[i]) {
-				delta += v - lstatc->state_prev[i];
-				lstatc->state_prev[i] = v;
-			}
-
-			if (!delta)
-				continue;
-
-			pn->lruvec_stats.state[i] += delta;
-			if (ppn)
-				ppn->lruvec_stats.state_pending[i] += delta;
-		}
 	}
 }
 
@@ -6373,8 +6399,6 @@ static int memory_numa_stat_show(struct seq_file *m, void *v)
 	int i;
 	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
 
-	cgroup_rstat_flush(memcg->css.cgroup);
-
 	for (i = 0; i < ARRAY_SIZE(memory_stats); i++) {
 		int nid;
 
@@ -6680,7 +6704,8 @@ void mem_cgroup_calculate_protection(struct mem_cgroup *root,
 			atomic_long_read(&parent->memory.children_low_usage)));
 }
 
-static int charge_memcg(struct page *page, struct mem_cgroup *memcg, gfp_t gfp)
+static int __mem_cgroup_charge(struct page *page, struct mem_cgroup *memcg,
+			       gfp_t gfp)
 {
 	unsigned int nr_pages = thp_nr_pages(page);
 	int ret;
@@ -6701,7 +6726,7 @@ out:
 }
 
 /**
- * __mem_cgroup_charge - charge a newly allocated page to a cgroup
+ * mem_cgroup_charge - charge a newly allocated page to a cgroup
  * @page: page to charge
  * @mm: mm context of the victim
  * @gfp_mask: reclaim mode
@@ -6714,14 +6739,16 @@ out:
  *
  * Returns 0 on success. Otherwise, an error code is returned.
  */
-int __mem_cgroup_charge(struct page *page, struct mm_struct *mm,
-			gfp_t gfp_mask)
+int mem_cgroup_charge(struct page *page, struct mm_struct *mm, gfp_t gfp_mask)
 {
 	struct mem_cgroup *memcg;
 	int ret;
 
+	if (mem_cgroup_disabled())
+		return 0;
+
 	memcg = get_mem_cgroup_from_mm(mm);
-	ret = charge_memcg(page, memcg, gfp_mask);
+	ret = __mem_cgroup_charge(page, memcg, gfp_mask);
 	css_put(&memcg->css);
 
 	return ret;
@@ -6756,7 +6783,7 @@ int mem_cgroup_swapin_charge_page(struct page *page, struct mm_struct *mm,
 		memcg = get_mem_cgroup_from_mm(mm);
 	rcu_read_unlock();
 
-	ret = charge_memcg(page, memcg, gfp);
+	ret = __mem_cgroup_charge(page, memcg, gfp);
 
 	css_put(&memcg->css);
 	return ret;
@@ -6892,14 +6919,17 @@ static void uncharge_page(struct page *page, struct uncharge_gather *ug)
 }
 
 /**
- * __mem_cgroup_uncharge - uncharge a page
+ * mem_cgroup_uncharge - uncharge a page
  * @page: page to uncharge
  *
- * Uncharge a page previously charged with __mem_cgroup_charge().
+ * Uncharge a page previously charged with mem_cgroup_charge().
  */
-void __mem_cgroup_uncharge(struct page *page)
+void mem_cgroup_uncharge(struct page *page)
 {
 	struct uncharge_gather ug;
+
+	if (mem_cgroup_disabled())
+		return;
 
 	/* Don't touch page->lru of any random page, pre-check: */
 	if (!page_memcg(page))
@@ -6911,16 +6941,19 @@ void __mem_cgroup_uncharge(struct page *page)
 }
 
 /**
- * __mem_cgroup_uncharge_list - uncharge a list of page
+ * mem_cgroup_uncharge_list - uncharge a list of page
  * @page_list: list of pages to uncharge
  *
  * Uncharge a list of pages previously charged with
- * __mem_cgroup_charge().
+ * mem_cgroup_charge().
  */
-void __mem_cgroup_uncharge_list(struct list_head *page_list)
+void mem_cgroup_uncharge_list(struct list_head *page_list)
 {
 	struct uncharge_gather ug;
 	struct page *page;
+
+	if (mem_cgroup_disabled())
+		return;
 
 	uncharge_gather_clear(&ug);
 	list_for_each_entry(page, page_list, lru)
@@ -7017,14 +7050,14 @@ void mem_cgroup_sk_free(struct sock *sk)
  * mem_cgroup_charge_skmem - charge socket memory
  * @memcg: memcg to charge
  * @nr_pages: number of pages to charge
- * @gfp_mask: reclaim mode
  *
  * Charges @nr_pages to @memcg. Returns %true if the charge fit within
- * @memcg's configured limit, %false if it doesn't.
+ * @memcg's configured limit, %false if the charge had to be forced.
  */
-bool mem_cgroup_charge_skmem(struct mem_cgroup *memcg, unsigned int nr_pages,
-			     gfp_t gfp_mask)
+bool mem_cgroup_charge_skmem(struct mem_cgroup *memcg, unsigned int nr_pages)
 {
+	gfp_t gfp_mask = GFP_KERNEL;
+
 	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys)) {
 		struct page_counter *fail;
 
@@ -7032,19 +7065,21 @@ bool mem_cgroup_charge_skmem(struct mem_cgroup *memcg, unsigned int nr_pages,
 			memcg->tcpmem_pressure = 0;
 			return true;
 		}
+		page_counter_charge(&memcg->tcpmem, nr_pages);
 		memcg->tcpmem_pressure = 1;
-		if (gfp_mask & __GFP_NOFAIL) {
-			page_counter_charge(&memcg->tcpmem, nr_pages);
-			return true;
-		}
 		return false;
 	}
 
-	if (try_charge(memcg, gfp_mask, nr_pages) == 0) {
-		mod_memcg_state(memcg, MEMCG_SOCK, nr_pages);
-		return true;
-	}
+	/* Don't block in the packet receive path */
+	if (in_softirq())
+		gfp_mask = GFP_NOWAIT;
 
+	mod_memcg_state(memcg, MEMCG_SOCK, nr_pages);
+
+	if (try_charge(memcg, gfp_mask, nr_pages) == 0)
+		return true;
+
+	try_charge(memcg, gfp_mask|__GFP_NOFAIL, nr_pages);
 	return false;
 }
 
@@ -7211,7 +7246,7 @@ void mem_cgroup_swapout(struct page *page, swp_entry_t entry)
 }
 
 /**
- * __mem_cgroup_try_charge_swap - try charging swap space for a page
+ * mem_cgroup_try_charge_swap - try charging swap space for a page
  * @page: page being added to swap
  * @entry: swap entry to charge
  *
@@ -7219,12 +7254,15 @@ void mem_cgroup_swapout(struct page *page, swp_entry_t entry)
  *
  * Returns 0 on success, -ENOMEM on failure.
  */
-int __mem_cgroup_try_charge_swap(struct page *page, swp_entry_t entry)
+int mem_cgroup_try_charge_swap(struct page *page, swp_entry_t entry)
 {
 	unsigned int nr_pages = thp_nr_pages(page);
 	struct page_counter *counter;
 	struct mem_cgroup *memcg;
 	unsigned short oldid;
+
+	if (mem_cgroup_disabled())
+		return 0;
 
 	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
 		return 0;
@@ -7261,11 +7299,11 @@ int __mem_cgroup_try_charge_swap(struct page *page, swp_entry_t entry)
 }
 
 /**
- * __mem_cgroup_uncharge_swap - uncharge swap space
+ * mem_cgroup_uncharge_swap - uncharge swap space
  * @entry: swap entry to uncharge
  * @nr_pages: the amount of swap space to uncharge
  */
-void __mem_cgroup_uncharge_swap(swp_entry_t entry, unsigned int nr_pages)
+void mem_cgroup_uncharge_swap(swp_entry_t entry, unsigned int nr_pages)
 {
 	struct mem_cgroup *memcg;
 	unsigned short id;

@@ -20,7 +20,9 @@ properties:
       - snps,dwcmshc-sdhci
 
   reg:
-    maxItems: 1
+    minItems: 1
+    items:
+      - description: Offset and length of the register set for the device
 
   interrupts:
     maxItems: 1

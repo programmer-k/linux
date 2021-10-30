@@ -43,8 +43,8 @@ static void snd_dma_sg_free(struct snd_dma_buffer *dmab)
 	dmab->area = NULL;
 
 	tmpb.dev.type = SNDRV_DMA_TYPE_DEV;
-	if (dmab->dev.type == SNDRV_DMA_TYPE_DEV_WC_SG)
-		tmpb.dev.type = SNDRV_DMA_TYPE_DEV_WC;
+	if (dmab->dev.type == SNDRV_DMA_TYPE_DEV_UC_SG)
+		tmpb.dev.type = SNDRV_DMA_TYPE_DEV_UC;
 	tmpb.dev.dev = sgbuf->dev;
 	for (i = 0; i < sgbuf->pages; i++) {
 		if (!(sgbuf->table[i].addr & ~PAGE_MASK))
@@ -63,7 +63,7 @@ static void snd_dma_sg_free(struct snd_dma_buffer *dmab)
 
 #define MAX_ALLOC_PAGES		32
 
-static void *snd_dma_sg_alloc(struct snd_dma_buffer *dmab, size_t size)
+static int snd_dma_sg_alloc(struct snd_dma_buffer *dmab, size_t size)
 {
 	struct snd_sg_buf *sgbuf;
 	unsigned int i, pages, chunk, maxpages;
@@ -72,13 +72,12 @@ static void *snd_dma_sg_alloc(struct snd_dma_buffer *dmab, size_t size)
 	struct page **pgtable;
 	int type = SNDRV_DMA_TYPE_DEV;
 	pgprot_t prot = PAGE_KERNEL;
-	void *area;
 
 	dmab->private_data = sgbuf = kzalloc(sizeof(*sgbuf), GFP_KERNEL);
 	if (!sgbuf)
-		return NULL;
-	if (dmab->dev.type == SNDRV_DMA_TYPE_DEV_WC_SG) {
-		type = SNDRV_DMA_TYPE_DEV_WC;
+		return -ENOMEM;
+	if (dmab->dev.type == SNDRV_DMA_TYPE_DEV_UC_SG) {
+		type = SNDRV_DMA_TYPE_DEV_UC;
 #ifdef pgprot_noncached
 		prot = pgprot_noncached(PAGE_KERNEL);
 #endif
@@ -128,14 +127,14 @@ static void *snd_dma_sg_alloc(struct snd_dma_buffer *dmab, size_t size)
 	}
 
 	sgbuf->size = size;
-	area = vmap(sgbuf->page_table, sgbuf->pages, VM_MAP, prot);
-	if (!area)
+	dmab->area = vmap(sgbuf->page_table, sgbuf->pages, VM_MAP, prot);
+	if (! dmab->area)
 		goto _failed;
-	return area;
+	return 0;
 
  _failed:
 	snd_dma_sg_free(dmab); /* free the table */
-	return NULL;
+	return -ENOMEM;
 }
 
 static dma_addr_t snd_dma_sg_get_addr(struct snd_dma_buffer *dmab,
@@ -183,19 +182,10 @@ static unsigned int snd_dma_sg_get_chunk_size(struct snd_dma_buffer *dmab,
 	return size;
 }
 
-static int snd_dma_sg_mmap(struct snd_dma_buffer *dmab,
-			   struct vm_area_struct *area)
-{
-	if (dmab->dev.type == SNDRV_DMA_TYPE_DEV_WC_SG)
-		area->vm_page_prot = pgprot_writecombine(area->vm_page_prot);
-	return -ENOENT; /* continue with the default mmap handler */
-}
-
 const struct snd_malloc_ops snd_dma_sg_ops = {
 	.alloc = snd_dma_sg_alloc,
 	.free = snd_dma_sg_free,
 	.get_addr = snd_dma_sg_get_addr,
 	.get_page = snd_dma_sg_get_page,
 	.get_chunk_size = snd_dma_sg_get_chunk_size,
-	.mmap = snd_dma_sg_mmap,
 };

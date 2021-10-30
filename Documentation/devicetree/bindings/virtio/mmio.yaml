@@ -36,8 +36,7 @@ required:
   - reg
   - interrupts
 
-additionalProperties:
-  type: object
+additionalProperties: false
 
 examples:
   - |

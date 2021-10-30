@@ -1162,7 +1162,13 @@ void qedf_scsi_completion(struct qedf_ctx *qedf, struct fcoe_cqe *cqe,
 		return;
 	}
 
-	if (!scsi_cmd_to_rq(sc_cmd)->q) {
+	if (!sc_cmd->request) {
+		QEDF_WARN(&(qedf->dbg_ctx), "sc_cmd->request is NULL, "
+		    "sc_cmd=%p.\n", sc_cmd);
+		return;
+	}
+
+	if (!sc_cmd->request->q) {
 		QEDF_WARN(&(qedf->dbg_ctx), "request->q is NULL so request "
 		   "is not valid, sc_cmd=%p.\n", sc_cmd);
 		return;

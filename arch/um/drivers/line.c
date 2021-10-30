@@ -538,14 +538,12 @@ int register_lines(struct line_driver *line_driver,
 		   const struct tty_operations *ops,
 		   struct line *lines, int nlines)
 {
-	struct tty_driver *driver;
+	struct tty_driver *driver = alloc_tty_driver(nlines);
 	int err;
 	int i;
 
-	driver = tty_alloc_driver(nlines, TTY_DRIVER_REAL_RAW |
-			TTY_DRIVER_DYNAMIC_DEV);
-	if (IS_ERR(driver))
-		return PTR_ERR(driver);
+	if (!driver)
+		return -ENOMEM;
 
 	driver->driver_name = line_driver->name;
 	driver->name = line_driver->device_name;
@@ -553,8 +551,9 @@ int register_lines(struct line_driver *line_driver,
 	driver->minor_start = line_driver->minor_start;
 	driver->type = line_driver->type;
 	driver->subtype = line_driver->subtype;
+	driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV;
 	driver->init_termios = tty_std_termios;
-
+	
 	for (i = 0; i < nlines; i++) {
 		tty_port_init(&lines[i].port);
 		lines[i].port.ops = &line_port_ops;
@@ -568,7 +567,7 @@ int register_lines(struct line_driver *line_driver,
 	if (err) {
 		printk(KERN_ERR "register_lines : can't register %s driver\n",
 		       line_driver->name);
-		tty_driver_kref_put(driver);
+		put_tty_driver(driver);
 		for (i = 0; i < nlines; i++)
 			tty_port_destroy(&lines[i].port);
 		return err;

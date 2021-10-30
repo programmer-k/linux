@@ -99,9 +99,7 @@ static void mlx5i_get_channels(struct net_device *dev,
 }
 
 static int mlx5i_set_coalesce(struct net_device *netdev,
-			      struct ethtool_coalesce *coal,
-			      struct kernel_ethtool_coalesce *kernel_coal,
-			      struct netlink_ext_ack *extack)
+			      struct ethtool_coalesce *coal)
 {
 	struct mlx5e_priv *priv = mlx5i_epriv(netdev);
 
@@ -109,9 +107,7 @@ static int mlx5i_set_coalesce(struct net_device *netdev,
 }
 
 static int mlx5i_get_coalesce(struct net_device *netdev,
-			      struct ethtool_coalesce *coal,
-			      struct kernel_ethtool_coalesce *kernel_coal,
-			      struct netlink_ext_ack *extack)
+			      struct ethtool_coalesce *coal)
 {
 	struct mlx5e_priv *priv = mlx5i_epriv(netdev);
 

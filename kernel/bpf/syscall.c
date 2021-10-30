@@ -260,8 +260,8 @@ static int bpf_map_copy_value(struct bpf_map *map, void *key, void *value,
 				copy_map_value_locked(map, value, ptr, true);
 			else
 				copy_map_value(map, value, ptr);
-			/* mask lock and timer, since value wasn't zero inited */
-			check_and_init_map_value(map, value);
+			/* mask lock, since value wasn't zero inited */
+			check_and_init_map_lock(map, value);
 		}
 		rcu_read_unlock();
 	}
@@ -623,8 +623,7 @@ static int bpf_map_mmap(struct file *filp, struct vm_area_struct *vma)
 	struct bpf_map *map = filp->private_data;
 	int err;
 
-	if (!map->ops->map_mmap || map_value_has_spin_lock(map) ||
-	    map_value_has_timer(map))
+	if (!map->ops->map_mmap || map_value_has_spin_lock(map))
 		return -ENOTSUPP;
 
 	if (!(vma->vm_flags & VM_SHARED))
@@ -794,16 +793,6 @@ static int map_check_btf(struct bpf_map *map, const struct btf *btf,
 		}
 	}
 
-	map->timer_off = btf_find_timer(btf, value_type);
-	if (map_value_has_timer(map)) {
-		if (map->map_flags & BPF_F_RDONLY_PROG)
-			return -EACCES;
-		if (map->map_type != BPF_MAP_TYPE_HASH &&
-		    map->map_type != BPF_MAP_TYPE_LRU_HASH &&
-		    map->map_type != BPF_MAP_TYPE_ARRAY)
-			return -EOPNOTSUPP;
-	}
-
 	if (map->ops->map_check_btf)
 		ret = map->ops->map_check_btf(map, btf, key_type, value_type);
 
@@ -855,7 +844,6 @@ static int map_create(union bpf_attr *attr)
 	mutex_init(&map->freeze_mutex);
 
 	map->spin_lock_off = -EINVAL;
-	map->timer_off = -EINVAL;
 	if (attr->btf_key_type_id || attr->btf_value_type_id ||
 	    /* Even the map's value is a kernel's struct,
 	     * the bpf_prog.o must have BTF to begin with
@@ -1013,7 +1001,7 @@ int __weak bpf_stackmap_copy(struct bpf_map *map, void *key, void *value)
 static void *__bpf_copy_key(void __user *ukey, u64 key_size)
 {
 	if (key_size)
-		return vmemdup_user(ukey, key_size);
+		return memdup_user(ukey, key_size);
 
 	if (ukey)
 		return ERR_PTR(-EINVAL);
@@ -1024,7 +1012,7 @@ static void *__bpf_copy_key(void __user *ukey, u64 key_size)
 static void *___bpf_copy_key(bpfptr_t ukey, u64 key_size)
 {
 	if (key_size)
-		return kvmemdup_bpfptr(ukey, key_size);
+		return memdup_bpfptr(ukey, key_size);
 
 	if (!bpfptr_is_null(ukey))
 		return ERR_PTR(-EINVAL);
@@ -1076,7 +1064,7 @@ static int map_lookup_elem(union bpf_attr *attr)
 	value_size = bpf_map_value_size(map);
 
 	err = -ENOMEM;
-	value = kvmalloc(value_size, GFP_USER | __GFP_NOWARN);
+	value = kmalloc(value_size, GFP_USER | __GFP_NOWARN);
 	if (!value)
 		goto free_key;
 
@@ -1091,9 +1079,9 @@ static int map_lookup_elem(union bpf_attr *attr)
 	err = 0;
 
 free_value:
-	kvfree(value);
+	kfree(value);
 free_key:
-	kvfree(key);
+	kfree(key);
 err_put:
 	fdput(f);
 	return err;
@@ -1137,10 +1125,16 @@ static int map_update_elem(union bpf_attr *attr, bpfptr_t uattr)
 		goto err_put;
 	}
 
-	value_size = bpf_map_value_size(map);
+	if (map->map_type == BPF_MAP_TYPE_PERCPU_HASH ||
+	    map->map_type == BPF_MAP_TYPE_LRU_PERCPU_HASH ||
+	    map->map_type == BPF_MAP_TYPE_PERCPU_ARRAY ||
+	    map->map_type == BPF_MAP_TYPE_PERCPU_CGROUP_STORAGE)
+		value_size = round_up(map->value_size, 8) * num_possible_cpus();
+	else
+		value_size = map->value_size;
 
 	err = -ENOMEM;
-	value = kvmalloc(value_size, GFP_USER | __GFP_NOWARN);
+	value = kmalloc(value_size, GFP_USER | __GFP_NOWARN);
 	if (!value)
 		goto free_key;
 
@@ -1151,9 +1145,9 @@ static int map_update_elem(union bpf_attr *attr, bpfptr_t uattr)
 	err = bpf_map_update_value(map, f, key, value, attr->flags);
 
 free_value:
-	kvfree(value);
+	kfree(value);
 free_key:
-	kvfree(key);
+	kfree(key);
 err_put:
 	fdput(f);
 	return err;
@@ -1205,7 +1199,7 @@ static int map_delete_elem(union bpf_attr *attr)
 	bpf_enable_instrumentation();
 	maybe_wait_bpf_programs(map);
 out:
-	kvfree(key);
+	kfree(key);
 err_put:
 	fdput(f);
 	return err;
@@ -1247,7 +1241,7 @@ static int map_get_next_key(union bpf_attr *attr)
 	}
 
 	err = -ENOMEM;
-	next_key = kvmalloc(map->key_size, GFP_USER);
+	next_key = kmalloc(map->key_size, GFP_USER);
 	if (!next_key)
 		goto free_key;
 
@@ -1270,9 +1264,9 @@ out:
 	err = 0;
 
 free_next_key:
-	kvfree(next_key);
+	kfree(next_key);
 free_key:
-	kvfree(key);
+	kfree(key);
 err_put:
 	fdput(f);
 	return err;
@@ -1299,7 +1293,7 @@ int generic_map_delete_batch(struct bpf_map *map,
 	if (!max_count)
 		return 0;
 
-	key = kvmalloc(map->key_size, GFP_USER | __GFP_NOWARN);
+	key = kmalloc(map->key_size, GFP_USER | __GFP_NOWARN);
 	if (!key)
 		return -ENOMEM;
 
@@ -1326,7 +1320,7 @@ int generic_map_delete_batch(struct bpf_map *map,
 	if (copy_to_user(&uattr->batch.count, &cp, sizeof(cp)))
 		err = -EFAULT;
 
-	kvfree(key);
+	kfree(key);
 	return err;
 }
 
@@ -1357,13 +1351,13 @@ int generic_map_update_batch(struct bpf_map *map,
 	if (!max_count)
 		return 0;
 
-	key = kvmalloc(map->key_size, GFP_USER | __GFP_NOWARN);
+	key = kmalloc(map->key_size, GFP_USER | __GFP_NOWARN);
 	if (!key)
 		return -ENOMEM;
 
-	value = kvmalloc(value_size, GFP_USER | __GFP_NOWARN);
+	value = kmalloc(value_size, GFP_USER | __GFP_NOWARN);
 	if (!value) {
-		kvfree(key);
+		kfree(key);
 		return -ENOMEM;
 	}
 
@@ -1384,8 +1378,8 @@ int generic_map_update_batch(struct bpf_map *map,
 	if (copy_to_user(&uattr->batch.count, &cp, sizeof(cp)))
 		err = -EFAULT;
 
-	kvfree(value);
-	kvfree(key);
+	kfree(value);
+	kfree(key);
 	return err;
 }
 
@@ -1419,13 +1413,13 @@ int generic_map_lookup_batch(struct bpf_map *map,
 	if (put_user(0, &uattr->batch.count))
 		return -EFAULT;
 
-	buf_prevkey = kvmalloc(map->key_size, GFP_USER | __GFP_NOWARN);
+	buf_prevkey = kmalloc(map->key_size, GFP_USER | __GFP_NOWARN);
 	if (!buf_prevkey)
 		return -ENOMEM;
 
-	buf = kvmalloc(map->key_size + value_size, GFP_USER | __GFP_NOWARN);
+	buf = kmalloc(map->key_size + value_size, GFP_USER | __GFP_NOWARN);
 	if (!buf) {
-		kvfree(buf_prevkey);
+		kfree(buf_prevkey);
 		return -ENOMEM;
 	}
 
@@ -1485,8 +1479,8 @@ int generic_map_lookup_batch(struct bpf_map *map,
 		err = -EFAULT;
 
 free_buf:
-	kvfree(buf_prevkey);
-	kvfree(buf);
+	kfree(buf_prevkey);
+	kfree(buf);
 	return err;
 }
 
@@ -1541,7 +1535,7 @@ static int map_lookup_and_delete_elem(union bpf_attr *attr)
 	value_size = bpf_map_value_size(map);
 
 	err = -ENOMEM;
-	value = kvmalloc(value_size, GFP_USER | __GFP_NOWARN);
+	value = kmalloc(value_size, GFP_USER | __GFP_NOWARN);
 	if (!value)
 		goto free_key;
 
@@ -1573,9 +1567,9 @@ static int map_lookup_and_delete_elem(union bpf_attr *attr)
 	err = 0;
 
 free_value:
-	kvfree(value);
+	kfree(value);
 free_key:
-	kvfree(key);
+	kfree(key);
 err_put:
 	fdput(f);
 	return err;
@@ -1597,8 +1591,7 @@ static int map_freeze(const union bpf_attr *attr)
 	if (IS_ERR(map))
 		return PTR_ERR(map);
 
-	if (map->map_type == BPF_MAP_TYPE_STRUCT_OPS ||
-	    map_value_has_timer(map)) {
+	if (map->map_type == BPF_MAP_TYPE_STRUCT_OPS) {
 		fdput(f);
 		return -ENOTSUPP;
 	}
@@ -1706,8 +1699,6 @@ static int bpf_prog_alloc_id(struct bpf_prog *prog)
 
 void bpf_prog_free_id(struct bpf_prog *prog, bool do_idr_lock)
 {
-	unsigned long flags;
-
 	/* cBPF to eBPF migrations are currently not in the idr store.
 	 * Offloaded programs are removed from the store when their device
 	 * disappears - even if someone grabs an fd to them they are unusable,
@@ -1717,7 +1708,7 @@ void bpf_prog_free_id(struct bpf_prog *prog, bool do_idr_lock)
 		return;
 
 	if (do_idr_lock)
-		spin_lock_irqsave(&prog_idr_lock, flags);
+		spin_lock_bh(&prog_idr_lock);
 	else
 		__acquire(&prog_idr_lock);
 
@@ -1725,7 +1716,7 @@ void bpf_prog_free_id(struct bpf_prog *prog, bool do_idr_lock)
 	prog->aux->id = 0;
 
 	if (do_idr_lock)
-		spin_unlock_irqrestore(&prog_idr_lock, flags);
+		spin_unlock_bh(&prog_idr_lock);
 	else
 		__release(&prog_idr_lock);
 }
@@ -1761,32 +1752,14 @@ static void __bpf_prog_put_noref(struct bpf_prog *prog, bool deferred)
 	}
 }
 
-static void bpf_prog_put_deferred(struct work_struct *work)
-{
-	struct bpf_prog_aux *aux;
-	struct bpf_prog *prog;
-
-	aux = container_of(work, struct bpf_prog_aux, work);
-	prog = aux->prog;
-	perf_event_bpf_event(prog, PERF_BPF_EVENT_PROG_UNLOAD, 0);
-	bpf_audit_prog(prog, BPF_AUDIT_UNLOAD);
-	__bpf_prog_put_noref(prog, true);
-}
-
 static void __bpf_prog_put(struct bpf_prog *prog, bool do_idr_lock)
 {
-	struct bpf_prog_aux *aux = prog->aux;
-
-	if (atomic64_dec_and_test(&aux->refcnt)) {
+	if (atomic64_dec_and_test(&prog->aux->refcnt)) {
+		perf_event_bpf_event(prog, PERF_BPF_EVENT_PROG_UNLOAD, 0);
+		bpf_audit_prog(prog, BPF_AUDIT_UNLOAD);
 		/* bpf_prog_free_id() must be called first */
 		bpf_prog_free_id(prog, do_idr_lock);
-
-		if (in_irq() || irqs_disabled()) {
-			INIT_WORK(&aux->work, bpf_prog_put_deferred);
-			schedule_work(&aux->work);
-		} else {
-			bpf_prog_put_deferred(&aux->work);
-		}
+		__bpf_prog_put_noref(prog, true);
 	}
 }
 
@@ -2899,79 +2872,6 @@ static const struct bpf_link_ops bpf_raw_tp_link_lops = {
 	.show_fdinfo = bpf_raw_tp_link_show_fdinfo,
 	.fill_link_info = bpf_raw_tp_link_fill_link_info,
 };
-
-#ifdef CONFIG_PERF_EVENTS
-struct bpf_perf_link {
-	struct bpf_link link;
-	struct file *perf_file;
-};
-
-static void bpf_perf_link_release(struct bpf_link *link)
-{
-	struct bpf_perf_link *perf_link = container_of(link, struct bpf_perf_link, link);
-	struct perf_event *event = perf_link->perf_file->private_data;
-
-	perf_event_free_bpf_prog(event);
-	fput(perf_link->perf_file);
-}
-
-static void bpf_perf_link_dealloc(struct bpf_link *link)
-{
-	struct bpf_perf_link *perf_link = container_of(link, struct bpf_perf_link, link);
-
-	kfree(perf_link);
-}
-
-static const struct bpf_link_ops bpf_perf_link_lops = {
-	.release = bpf_perf_link_release,
-	.dealloc = bpf_perf_link_dealloc,
-};
-
-static int bpf_perf_link_attach(const union bpf_attr *attr, struct bpf_prog *prog)
-{
-	struct bpf_link_primer link_primer;
-	struct bpf_perf_link *link;
-	struct perf_event *event;
-	struct file *perf_file;
-	int err;
-
-	if (attr->link_create.flags)
-		return -EINVAL;
-
-	perf_file = perf_event_get(attr->link_create.target_fd);
-	if (IS_ERR(perf_file))
-		return PTR_ERR(perf_file);
-
-	link = kzalloc(sizeof(*link), GFP_USER);
-	if (!link) {
-		err = -ENOMEM;
-		goto out_put_file;
-	}
-	bpf_link_init(&link->link, BPF_LINK_TYPE_PERF_EVENT, &bpf_perf_link_lops, prog);
-	link->perf_file = perf_file;
-
-	err = bpf_link_prime(&link->link, &link_primer);
-	if (err) {
-		kfree(link);
-		goto out_put_file;
-	}
-
-	event = perf_file->private_data;
-	err = perf_event_set_bpf_prog(event, prog, attr->link_create.perf_event.bpf_cookie);
-	if (err) {
-		bpf_link_cleanup(&link_primer);
-		goto out_put_file;
-	}
-	/* perf_event_set_bpf_prog() doesn't take its own refcnt on prog */
-	bpf_prog_inc(prog);
-
-	return bpf_link_settle(&link_primer);
-
-out_put_file:
-	fput(perf_file);
-	return err;
-}
-#endif /* CONFIG_PERF_EVENTS */
 
 #define BPF_RAW_TRACEPOINT_OPEN_LAST_FIELD raw_tracepoint.prog_fd
 
@@ -4214,26 +4114,15 @@ static int link_create(union bpf_attr *attr, bpfptr_t uattr)
 	if (ret)
 		goto out;
 
-	switch (prog->type) {
-	case BPF_PROG_TYPE_EXT:
+	if (prog->type == BPF_PROG_TYPE_EXT) {
 		ret = tracing_bpf_link_attach(attr, uattr, prog);
 		goto out;
-	case BPF_PROG_TYPE_PERF_EVENT:
-	case BPF_PROG_TYPE_KPROBE:
-	case BPF_PROG_TYPE_TRACEPOINT:
-		if (attr->link_create.attach_type != BPF_PERF_EVENT) {
-			ret = -EINVAL;
-			goto out;
-		}
-		ptype = prog->type;
-		break;
-	default:
-		ptype = attach_type_to_prog_type(attr->link_create.attach_type);
-		if (ptype == BPF_PROG_TYPE_UNSPEC || ptype != prog->type) {
-			ret = -EINVAL;
-			goto out;
-		}
-		break;
+	}
+
+	ptype = attach_type_to_prog_type(attr->link_create.attach_type);
+	if (ptype == BPF_PROG_TYPE_UNSPEC || ptype != prog->type) {
+		ret = -EINVAL;
+		goto out;
 	}
 
 	switch (ptype) {
@@ -4256,13 +4145,6 @@ static int link_create(union bpf_attr *attr, bpfptr_t uattr)
 #ifdef CONFIG_NET
 	case BPF_PROG_TYPE_XDP:
 		ret = bpf_xdp_link_attach(attr, prog);
-		break;
-#endif
-#ifdef CONFIG_PERF_EVENTS
-	case BPF_PROG_TYPE_PERF_EVENT:
-	case BPF_PROG_TYPE_TRACEPOINT:
-	case BPF_PROG_TYPE_KPROBE:
-		ret = bpf_perf_link_attach(attr, prog);
 		break;
 #endif
 	default:

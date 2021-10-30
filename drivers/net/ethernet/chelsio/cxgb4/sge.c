@@ -443,7 +443,7 @@ static void free_rx_bufs(struct adapter *adap, struct sge_fl *q, int n)
 		if (is_buf_mapped(d))
 			dma_unmap_page(adap->pdev_dev, get_buf_addr(d),
 				       get_buf_size(adap, d),
-				       DMA_FROM_DEVICE);
+				       PCI_DMA_FROMDEVICE);
 		put_page(d->page);
 		d->page = NULL;
 		if (++q->cidx == q->size)
@@ -469,7 +469,7 @@ static void unmap_rx_buf(struct adapter *adap, struct sge_fl *q)
 
 	if (is_buf_mapped(d))
 		dma_unmap_page(adap->pdev_dev, get_buf_addr(d),
-			       get_buf_size(adap, d), DMA_FROM_DEVICE);
+			       get_buf_size(adap, d), PCI_DMA_FROMDEVICE);
 	d->page = NULL;
 	if (++q->cidx == q->size)
 		q->cidx = 0;
@@ -566,7 +566,7 @@ static unsigned int refill_fl(struct adapter *adap, struct sge_fl *q, int n,
 
 		mapping = dma_map_page(adap->pdev_dev, pg, 0,
 				       PAGE_SIZE << s->fl_pg_order,
-				       DMA_FROM_DEVICE);
+				       PCI_DMA_FROMDEVICE);
 		if (unlikely(dma_mapping_error(adap->pdev_dev, mapping))) {
 			__free_pages(pg, s->fl_pg_order);
 			q->mapping_err++;
@@ -596,7 +596,7 @@ alloc_small_pages:
 		}
 
 		mapping = dma_map_page(adap->pdev_dev, pg, 0, PAGE_SIZE,
-				       DMA_FROM_DEVICE);
+				       PCI_DMA_FROMDEVICE);
 		if (unlikely(dma_mapping_error(adap->pdev_dev, mapping))) {
 			put_page(pg);
 			q->mapping_err++;

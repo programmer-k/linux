@@ -1021,10 +1021,9 @@ static int hvc_init(void)
 	int err;
 
 	/* We need more than hvc_count adapters due to hotplug additions. */
-	drv = tty_alloc_driver(HVC_ALLOC_TTY_ADAPTERS, TTY_DRIVER_REAL_RAW |
-			TTY_DRIVER_RESET_TERMIOS);
-	if (IS_ERR(drv)) {
-		err = PTR_ERR(drv);
+	drv = alloc_tty_driver(HVC_ALLOC_TTY_ADAPTERS);
+	if (!drv) {
+		err = -ENOMEM;
 		goto out;
 	}
 
@@ -1034,6 +1033,7 @@ static int hvc_init(void)
 	drv->minor_start = HVC_MINOR;
 	drv->type = TTY_DRIVER_TYPE_SYSTEM;
 	drv->init_termios = tty_std_termios;
+	drv->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_RESET_TERMIOS;
 	tty_set_operations(drv, &hvc_ops);
 
 	/* Always start the kthread because there can be hotplug vty adapters
@@ -1063,7 +1063,7 @@ stop_thread:
 	kthread_stop(hvc_task);
 	hvc_task = NULL;
 put_tty:
-	tty_driver_kref_put(drv);
+	put_tty_driver(drv);
 out:
 	return err;
 }

@@ -37,7 +37,6 @@ struct byt_cht_es8316_private {
 	struct clk *mclk;
 	struct snd_soc_jack jack;
 	struct gpio_desc *speaker_en_gpio;
-	struct device *codec_dev;
 	bool speaker_en;
 };
 
@@ -462,7 +461,6 @@ static int snd_byt_cht_es8316_mc_probe(struct platform_device *pdev)
 	const struct dmi_system_id *dmi_id;
 	struct device *dev = &pdev->dev;
 	struct snd_soc_acpi_mach *mach;
-	struct fwnode_handle *fwnode;
 	const char *platform_name;
 	struct acpi_device *adev;
 	struct device *codec_dev;
@@ -493,9 +491,6 @@ static int snd_byt_cht_es8316_mc_probe(struct platform_device *pdev)
 			 "i2c-%s", acpi_dev_name(adev));
 		put_device(&adev->dev);
 		byt_cht_es8316_dais[dai_index].codecs->name = codec_name;
-	} else {
-		dev_err(&pdev->dev, "Error cannot find '%s' dev\n", mach->id);
-		return -ENXIO;
 	}
 
 	/* override plaform name, if required */
@@ -540,25 +535,15 @@ static int snd_byt_cht_es8316_mc_probe(struct platform_device *pdev)
 	}
 
 	/* get speaker enable GPIO */
-	codec_dev = acpi_get_first_physical_node(adev);
+	codec_dev = bus_find_device_by_name(&i2c_bus_type, NULL, codec_name);
 	if (!codec_dev)
 		return -EPROBE_DEFER;
-	priv->codec_dev = get_device(codec_dev);
 
 	if (quirk & BYT_CHT_ES8316_JD_INVERTED)
 		props[cnt++] = PROPERTY_ENTRY_BOOL("everest,jack-detect-inverted");
 
 	if (cnt) {
-		fwnode = fwnode_create_software_node(props, NULL);
-		if (IS_ERR(fwnode)) {
-			put_device(codec_dev);
-			return PTR_ERR(fwnode);
-		}
-
-		ret = device_add_software_node(codec_dev, to_software_node(fwnode));
-
-		fwnode_handle_put(fwnode);
-
+		ret = device_add_properties(codec_dev, props);
 		if (ret) {
 			put_device(codec_dev);
 			return ret;
@@ -570,6 +555,7 @@ static int snd_byt_cht_es8316_mc_probe(struct platform_device *pdev)
 		gpiod_get_index(codec_dev, "speaker-enable", 0,
 				/* see comment in byt_cht_es8316_resume */
 				GPIOD_OUT_LOW | GPIOD_FLAGS_BIT_NONEXCLUSIVE);
+	put_device(codec_dev);
 
 	if (IS_ERR(priv->speaker_en_gpio)) {
 		ret = PTR_ERR(priv->speaker_en_gpio);
@@ -581,7 +567,7 @@ static int snd_byt_cht_es8316_mc_probe(struct platform_device *pdev)
 			dev_err(dev, "get speaker GPIO failed: %d\n", ret);
 			fallthrough;
 		case -EPROBE_DEFER:
-			goto err_put_codec;
+			return ret;
 		}
 	}
 
@@ -619,15 +605,10 @@ static int snd_byt_cht_es8316_mc_probe(struct platform_device *pdev)
 	if (ret) {
 		gpiod_put(priv->speaker_en_gpio);
 		dev_err(dev, "snd_soc_register_card failed: %d\n", ret);
-		goto err_put_codec;
+		return ret;
 	}
 	platform_set_drvdata(pdev, &byt_cht_es8316_card);
 	return 0;
-
-err_put_codec:
-	device_remove_software_node(priv->codec_dev);
-	put_device(priv->codec_dev);
-	return ret;
 }
 
 static int snd_byt_cht_es8316_mc_remove(struct platform_device *pdev)
@@ -636,8 +617,6 @@ static int snd_byt_cht_es8316_mc_remove(struct platform_device *pdev)
 	struct byt_cht_es8316_private *priv = snd_soc_card_get_drvdata(card);
 
 	gpiod_put(priv->speaker_en_gpio);
-	device_remove_software_node(priv->codec_dev);
-	put_device(priv->codec_dev);
 	return 0;
 }
 

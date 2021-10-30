@@ -220,6 +220,7 @@ static int __si1145_command_reset(struct si1145_data *data)
 			return -ETIMEDOUT;
 		}
 		msleep(SI1145_COMMAND_MINSLEEP_MS);
+		continue;
 	}
 }
 

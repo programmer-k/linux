@@ -618,11 +618,3 @@
 	status = "okay";
 	ti,no-reset-on-init;
 };
-
-&pruss1_mdio {
-	status = "disabled";
-};
-
-&pruss2_mdio {
-	status = "disabled";
-};

@@ -892,7 +892,8 @@ dcssblk_submit_bio(struct bio *bio)
 
 	index = (bio->bi_iter.bi_sector >> 3);
 	bio_for_each_segment(bvec, bio, iter) {
-		page_addr = (unsigned long)bvec_virt(&bvec);
+		page_addr = (unsigned long)
+			page_address(bvec.bv_page) + bvec.bv_offset;
 		source_addr = dev_info->start + (index<<12) + bytes_done;
 		if (unlikely((page_addr & 4095) != 0) || (bvec.bv_len & 4095) != 0)
 			// More paranoia.

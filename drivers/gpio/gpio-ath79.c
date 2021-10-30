@@ -204,8 +204,11 @@ static void ath79_gpio_irq_handler(struct irq_desc *desc)
 
 	raw_spin_unlock_irqrestore(&ctrl->lock, flags);
 
-	for_each_set_bit(irq, &pending, gc->ngpio)
-		generic_handle_domain_irq(gc->irq.domain, irq);
+	if (pending) {
+		for_each_set_bit(irq, &pending, gc->ngpio)
+			generic_handle_irq(
+				irq_linear_revmap(gc->irq.domain, irq));
+	}
 
 	chained_irq_exit(irqchip, desc);
 }

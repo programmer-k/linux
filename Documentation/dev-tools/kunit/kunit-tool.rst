@@ -114,12 +114,9 @@ results in TAP format, you can pass the ``--raw_output`` argument.
 
 	./tools/testing/kunit/kunit.py run --raw_output
 
-The raw output from test runs may contain other, non-KUnit kernel log
-lines. You can see just KUnit output with ``--raw_output=kunit``:
-
-.. code-block:: bash
-
-	./tools/testing/kunit/kunit.py run --raw_output=kunit
+.. note::
+	The raw output from test runs may contain other, non-KUnit kernel log
+	lines.
 
 If you have KUnit results in their raw TAP format, you can parse them and print
 the human-readable summary with the ``parse`` command for kunit_tool. This

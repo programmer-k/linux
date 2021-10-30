@@ -35,8 +35,6 @@
 #include "include/irq_service_interface.h"
 #include "dcn20/dcn20_resource.h"
 
-#include "dml/dcn2x/dcn2x.h"
-
 #include "clk_mgr.h"
 #include "dcn10/dcn10_hubp.h"
 #include "dcn10/dcn10_ipp.h"
@@ -886,8 +884,7 @@ static const struct dc_debug_options debug_defaults_drv = {
 		.disable_48mhz_pwrdwn = false,
 		.usbc_combo_phy_reset_wa = true,
 		.dmub_command_table = true,
-		.use_max_lb = true,
-		.optimize_edp_link_rate = true
+		.use_max_lb = true
 };
 
 static const struct dc_debug_options debug_defaults_diags = {

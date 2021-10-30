@@ -116,7 +116,11 @@
  * GCC 4.5 and later have a 32 bytes section alignment for structures.
  * Except GCC 4.9, that feels the need to align on 64 bytes.
  */
+#if __GNUC__ == 4 && __GNUC_MINOR__ == 9
+#define STRUCT_ALIGNMENT 64
+#else
 #define STRUCT_ALIGNMENT 32
+#endif
 #define STRUCT_ALIGN() . = ALIGN(STRUCT_ALIGNMENT)
 
 /*
@@ -478,8 +482,6 @@
 	}								\
 									\
 	TRACEDATA							\
-									\
-	PRINTK_INDEX							\
 									\
 	/* Kernel symbol table: Normal symbols */			\
 	__ksymtab         : AT(ADDR(__ksymtab) - LOAD_OFFSET) {		\
@@ -890,17 +892,6 @@
 	}
 #else
 #define TRACEDATA
-#endif
-
-#ifdef CONFIG_PRINTK_INDEX
-#define PRINTK_INDEX							\
-	.printk_index : AT(ADDR(.printk_index) - LOAD_OFFSET) {		\
-		__start_printk_index = .;				\
-		*(.printk_index)					\
-		__stop_printk_index = .;				\
-	}
-#else
-#define PRINTK_INDEX
 #endif
 
 #define NOTES								\

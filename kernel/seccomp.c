@@ -922,6 +922,30 @@ void get_seccomp_filter(struct task_struct *tsk)
 	refcount_inc(&orig->users);
 }
 
+static void seccomp_init_siginfo(kernel_siginfo_t *info, int syscall, int reason)
+{
+	clear_siginfo(info);
+	info->si_signo = SIGSYS;
+	info->si_code = SYS_SECCOMP;
+	info->si_call_addr = (void __user *)KSTK_EIP(current);
+	info->si_errno = reason;
+	info->si_arch = syscall_get_arch(current);
+	info->si_syscall = syscall;
+}
+
+/**
+ * seccomp_send_sigsys - signals the task to allow in-process syscall emulation
+ * @syscall: syscall number to send to userland
+ * @reason: filter-supplied reason code to send to userland (via si_errno)
+ *
+ * Forces a SIGSYS with a code of SYS_SECCOMP and related sigsys info.
+ */
+static void seccomp_send_sigsys(int syscall, int reason)
+{
+	struct kernel_siginfo info;
+	seccomp_init_siginfo(&info, syscall, reason);
+	force_sig_info(&info);
+}
 #endif	/* CONFIG_SECCOMP_FILTER */
 
 /* For use with seccomp_actions_logged */
@@ -1194,7 +1218,7 @@ static int __seccomp_filter(int this_syscall, const struct seccomp_data *sd,
 		/* Show the handler the original registers. */
 		syscall_rollback(current, current_pt_regs());
 		/* Let the filter pass back 16 bits of data. */
-		force_sig_seccomp(this_syscall, data, false);
+		seccomp_send_sigsys(this_syscall, data);
 		goto skip;
 
 	case SECCOMP_RET_TRACE:
@@ -1264,15 +1288,19 @@ static int __seccomp_filter(int this_syscall, const struct seccomp_data *sd,
 		seccomp_log(this_syscall, SIGSYS, action, true);
 		/* Dump core only if this is the last remaining thread. */
 		if (action != SECCOMP_RET_KILL_THREAD ||
-		    (atomic_read(&current->signal->live) == 1)) {
+		    get_nr_threads(current) == 1) {
+			kernel_siginfo_t info;
+
 			/* Show the original registers in the dump. */
 			syscall_rollback(current, current_pt_regs());
-			/* Trigger a coredump with SIGSYS */
-			force_sig_seccomp(this_syscall, data, true);
-		} else {
-			do_exit(SIGSYS);
+			/* Trigger a manual coredump since do_exit skips it. */
+			seccomp_init_siginfo(&info, this_syscall, data);
+			do_coredump(&info);
 		}
-		return -1; /* skip the syscall go directly to signal handling */
+		if (action == SECCOMP_RET_KILL_THREAD)
+			do_exit(SIGSYS);
+		else
+			do_group_exit(SIGSYS);
 	}
 
 	unreachable();

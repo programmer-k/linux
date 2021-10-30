@@ -1140,8 +1140,8 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 			continue;
 		length = 0;
 		switch (c) {
-		/* JPEG_MARKER_SOF0: baseline JPEG */
-		case JPEG_MARKER_SOF0:
+		/* SOF0: baseline JPEG */
+		case SOF0:
 			if (get_word_be(&jpeg_buffer, &word))
 				break;
 			length = (long)word - 2;
@@ -1172,7 +1172,7 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 			notfound = 0;
 			break;
 
-		case JPEG_MARKER_DQT:
+		case DQT:
 			if (get_word_be(&jpeg_buffer, &word))
 				break;
 			length = (long)word - 2;
@@ -1185,7 +1185,7 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 			skip(&jpeg_buffer, length);
 			break;
 
-		case JPEG_MARKER_DHT:
+		case DHT:
 			if (get_word_be(&jpeg_buffer, &word))
 				break;
 			length = (long)word - 2;
@@ -1198,15 +1198,15 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 			skip(&jpeg_buffer, length);
 			break;
 
-		case JPEG_MARKER_SOS:
+		case SOS:
 			sos = jpeg_buffer.curr - 2; /* 0xffda */
 			break;
 
 		/* skip payload-less markers */
-		case JPEG_MARKER_RST ... JPEG_MARKER_RST + 7:
-		case JPEG_MARKER_SOI:
-		case JPEG_MARKER_EOI:
-		case JPEG_MARKER_TEM:
+		case RST ... RST + 7:
+		case SOI:
+		case EOI:
+		case TEM:
 			break;
 
 		/* skip uninteresting payload markers */

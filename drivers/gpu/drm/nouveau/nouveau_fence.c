@@ -358,7 +358,7 @@ nouveau_fence_sync(struct nouveau_bo *nvbo, struct nouveau_channel *chan, bool e
 	fobj = dma_resv_shared_list(resv);
 	fence = dma_resv_excl_fence(resv);
 
-	if (fence) {
+	if (fence && (!exclusive || !fobj || !fobj->shared_count)) {
 		struct nouveau_channel *prev = NULL;
 		bool must_wait = true;
 

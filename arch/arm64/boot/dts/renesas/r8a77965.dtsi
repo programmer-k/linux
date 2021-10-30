@@ -14,8 +14,6 @@
 
 #define CPG_AUDIO_CLK_I		R8A77965_CLK_S0D4
 
-#define SOC_HAS_SATA
-
 / {
 	compatible = "renesas,r8a77965";
 	#address-cells = <2>;

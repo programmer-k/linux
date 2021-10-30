@@ -13,8 +13,16 @@ void i915_gem_object_init_memory_region(struct drm_i915_gem_object *obj,
 {
 	obj->mm.region = intel_memory_region_get(mem);
 
+	if (obj->base.size <= mem->min_page_size)
+		obj->flags |= I915_BO_ALLOC_CONTIGUOUS;
+
 	mutex_lock(&mem->objects.lock);
-	list_add(&obj->mm.region_link, &mem->objects.list);
+
+	if (obj->flags & I915_BO_ALLOC_VOLATILE)
+		list_add(&obj->mm.region_link, &mem->objects.purgeable);
+	else
+		list_add(&obj->mm.region_link, &mem->objects.list);
+
 	mutex_unlock(&mem->objects.lock);
 }
 
@@ -32,11 +40,9 @@ void i915_gem_object_release_memory_region(struct drm_i915_gem_object *obj)
 struct drm_i915_gem_object *
 i915_gem_object_create_region(struct intel_memory_region *mem,
 			      resource_size_t size,
-			      resource_size_t page_size,
 			      unsigned int flags)
 {
 	struct drm_i915_gem_object *obj;
-	resource_size_t default_page_size;
 	int err;
 
 	/*
@@ -50,14 +56,7 @@ i915_gem_object_create_region(struct intel_memory_region *mem,
 	if (!mem)
 		return ERR_PTR(-ENODEV);
 
-	default_page_size = mem->min_page_size;
-	if (page_size)
-		default_page_size = page_size;
-
-	GEM_BUG_ON(!is_power_of_2_u64(default_page_size));
-	GEM_BUG_ON(default_page_size < PAGE_SIZE);
-
-	size = round_up(size, default_page_size);
+	size = round_up(size, mem->min_page_size);
 
 	GEM_BUG_ON(!size);
 	GEM_BUG_ON(!IS_ALIGNED(size, I915_GTT_MIN_ALIGNMENT));
@@ -69,7 +68,7 @@ i915_gem_object_create_region(struct intel_memory_region *mem,
 	if (!obj)
 		return ERR_PTR(-ENOMEM);
 
-	err = mem->ops->init_object(mem, obj, size, page_size, flags);
+	err = mem->ops->init_object(mem, obj, size, flags);
 	if (err)
 		goto err_object_free;
 

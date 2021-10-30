@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1 */
 /*
+ *   fs/cifs/smb2pdu.h
  *
  *   Copyright (c) International Business Machines  Corp., 2009, 2013
  *                 Etersoft, 2012

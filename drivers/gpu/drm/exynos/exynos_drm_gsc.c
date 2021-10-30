@@ -86,6 +86,7 @@ struct gsc_scaler {
 /*
  * A structure of gsc context.
  *
+ * @regs_res: register resources.
  * @regs: memory mapped io registers.
  * @gsc_clk: gsc gate clock.
  * @sc: scaler infomations.
@@ -102,6 +103,7 @@ struct gsc_context {
 	struct exynos_drm_ipp_formats	*formats;
 	unsigned int			num_formats;
 
+	struct resource	*regs_res;
 	void __iomem	*regs;
 	const char	**clk_names;
 	struct clk	*clocks[GSC_MAX_CLOCKS];
@@ -1270,7 +1272,9 @@ static int gsc_probe(struct platform_device *pdev)
 		}
 	}
 
-	ctx->regs = devm_platform_ioremap_resource(pdev, 0);
+	/* resource memory */
+	ctx->regs_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	ctx->regs = devm_ioremap_resource(dev, ctx->regs_res);
 	if (IS_ERR(ctx->regs))
 		return PTR_ERR(ctx->regs);
 

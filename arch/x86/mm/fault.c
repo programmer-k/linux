@@ -710,8 +710,7 @@ oops:
 
 static noinline void
 kernelmode_fixup_or_oops(struct pt_regs *regs, unsigned long error_code,
-			 unsigned long address, int signal, int si_code,
-			 u32 pkey)
+			 unsigned long address, int signal, int si_code)
 {
 	WARN_ON_ONCE(user_mode(regs));
 
@@ -736,12 +735,8 @@ kernelmode_fixup_or_oops(struct pt_regs *regs, unsigned long error_code,
 
 			set_signal_archinfo(address, error_code);
 
-			if (si_code == SEGV_PKUERR) {
-				force_sig_pkuerr((void __user *)address, pkey);
-			} else {
-				/* XXX: hwpoison faults will set the wrong code. */
-				force_sig_fault(signal, si_code, (void __user *)address);
-			}
+			/* XXX: hwpoison faults will set the wrong code. */
+			force_sig_fault(signal, si_code, (void __user *)address);
 		}
 
 		/*
@@ -803,8 +798,7 @@ __bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 	struct task_struct *tsk = current;
 
 	if (!user_mode(regs)) {
-		kernelmode_fixup_or_oops(regs, error_code, address,
-					 SIGSEGV, si_code, pkey);
+		kernelmode_fixup_or_oops(regs, error_code, address, pkey, si_code);
 		return;
 	}
 
@@ -936,8 +930,7 @@ do_sigbus(struct pt_regs *regs, unsigned long error_code, unsigned long address,
 {
 	/* Kernel mode? Handle exceptions or die: */
 	if (!user_mode(regs)) {
-		kernelmode_fixup_or_oops(regs, error_code, address,
-					 SIGBUS, BUS_ADRERR, ARCH_DEFAULT_PKEY);
+		kernelmode_fixup_or_oops(regs, error_code, address, SIGBUS, BUS_ADRERR);
 		return;
 	}
 
@@ -1403,8 +1396,7 @@ good_area:
 		 */
 		if (!user_mode(regs))
 			kernelmode_fixup_or_oops(regs, error_code, address,
-						 SIGBUS, BUS_ADRERR,
-						 ARCH_DEFAULT_PKEY);
+						 SIGBUS, BUS_ADRERR);
 		return;
 	}
 
@@ -1424,8 +1416,7 @@ good_area:
 		return;
 
 	if (fatal_signal_pending(current) && !user_mode(regs)) {
-		kernelmode_fixup_or_oops(regs, error_code, address,
-					 0, 0, ARCH_DEFAULT_PKEY);
+		kernelmode_fixup_or_oops(regs, error_code, address, 0, 0);
 		return;
 	}
 
@@ -1433,8 +1424,7 @@ good_area:
 		/* Kernel mode? Handle exceptions or die: */
 		if (!user_mode(regs)) {
 			kernelmode_fixup_or_oops(regs, error_code, address,
-						 SIGSEGV, SEGV_MAPERR,
-						 ARCH_DEFAULT_PKEY);
+						 SIGSEGV, SEGV_MAPERR);
 			return;
 		}
 

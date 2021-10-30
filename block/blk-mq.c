@@ -188,11 +188,9 @@ void blk_mq_freeze_queue(struct request_queue *q)
 }
 EXPORT_SYMBOL_GPL(blk_mq_freeze_queue);
 
-void __blk_mq_unfreeze_queue(struct request_queue *q, bool force_atomic)
+void blk_mq_unfreeze_queue(struct request_queue *q)
 {
 	mutex_lock(&q->mq_freeze_lock);
-	if (force_atomic)
-		q->q_usage_counter.data->force_atomic = true;
 	q->mq_freeze_depth--;
 	WARN_ON_ONCE(q->mq_freeze_depth < 0);
 	if (!q->mq_freeze_depth) {
@@ -200,11 +198,6 @@ void __blk_mq_unfreeze_queue(struct request_queue *q, bool force_atomic)
 		wake_up_all(&q->mq_freeze_wq);
 	}
 	mutex_unlock(&q->mq_freeze_lock);
-}
-
-void blk_mq_unfreeze_queue(struct request_queue *q)
-{
-	__blk_mq_unfreeze_queue(q, false);
 }
 EXPORT_SYMBOL_GPL(blk_mq_unfreeze_queue);
 
@@ -532,7 +525,7 @@ void blk_mq_free_request(struct request *rq)
 		__blk_mq_dec_active_requests(hctx);
 
 	if (unlikely(laptop_mode && !blk_rq_is_passthrough(rq)))
-		laptop_io_completion(q->disk->bdi);
+		laptop_io_completion(q->backing_dev_info);
 
 	rq_qos_done(q, rq);
 
@@ -613,7 +606,7 @@ static inline bool blk_mq_complete_need_ipi(struct request *rq)
 	 * This is probably worse than completing the request on a different
 	 * cache domain.
 	 */
-	if (force_irqthreads())
+	if (force_irqthreads)
 		return false;
 
 	/* same CPU or cache domain?  Complete locally */
@@ -2142,18 +2135,6 @@ static void blk_add_rq_to_plug(struct blk_plug *plug, struct request *rq)
 	}
 }
 
-/*
- * Allow 4x BLK_MAX_REQUEST_COUNT requests on plug queue for multiple
- * queues. This is important for md arrays to benefit from merging
- * requests.
- */
-static inline unsigned short blk_plug_max_rq_count(struct blk_plug *plug)
-{
-	if (plug->multiple_queues)
-		return BLK_MAX_REQUEST_COUNT * 4;
-	return BLK_MAX_REQUEST_COUNT;
-}
-
 /**
  * blk_mq_submit_bio - Create and send a request to block device.
  * @bio: Bio pointer.
@@ -2250,7 +2231,7 @@ blk_qc_t blk_mq_submit_bio(struct bio *bio)
 		else
 			last = list_entry_rq(plug->mq_list.prev);
 
-		if (request_count >= blk_plug_max_rq_count(plug) || (last &&
+		if (request_count >= BLK_MAX_REQUEST_COUNT || (last &&
 		    blk_rq_bytes(last) >= BLK_PLUG_FLUSH_SIZE)) {
 			blk_flush_plug_list(plug, false);
 			trace_block_plug(q);
@@ -3134,8 +3115,7 @@ struct request_queue *blk_mq_init_queue(struct blk_mq_tag_set *set)
 }
 EXPORT_SYMBOL(blk_mq_init_queue);
 
-struct gendisk *__blk_mq_alloc_disk(struct blk_mq_tag_set *set, void *queuedata,
-		struct lock_class_key *lkclass)
+struct gendisk *__blk_mq_alloc_disk(struct blk_mq_tag_set *set, void *queuedata)
 {
 	struct request_queue *q;
 	struct gendisk *disk;
@@ -3144,11 +3124,12 @@ struct gendisk *__blk_mq_alloc_disk(struct blk_mq_tag_set *set, void *queuedata,
 	if (IS_ERR(q))
 		return ERR_CAST(q);
 
-	disk = __alloc_disk_node(q, set->numa_node, lkclass);
+	disk = __alloc_disk_node(0, set->numa_node);
 	if (!disk) {
 		blk_cleanup_queue(q);
 		return ERR_PTR(-ENOMEM);
 	}
+	disk->queue = q;
 	return disk;
 }
 EXPORT_SYMBOL(__blk_mq_alloc_disk);
@@ -3298,6 +3279,8 @@ int blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 	if (set->nr_maps > HCTX_TYPE_POLL &&
 	    set->map[HCTX_TYPE_POLL].nr_queues)
 		blk_queue_flag_set(QUEUE_FLAG_POLL, q);
+
+	q->sg_reserved_size = INT_MAX;
 
 	INIT_DELAYED_WORK(&q->requeue_work, blk_mq_requeue_work);
 	INIT_LIST_HEAD(&q->requeue_list);

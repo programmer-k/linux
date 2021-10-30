@@ -1481,22 +1481,6 @@ bool dc_validate_seamless_boot_timing(const struct dc *dc,
 	return true;
 }
 
-static inline bool should_update_pipe_for_stream(
-		struct dc_state *context,
-		struct pipe_ctx *pipe_ctx,
-		struct dc_stream_state *stream)
-{
-	return (pipe_ctx->stream && pipe_ctx->stream == stream);
-}
-
-static inline bool should_update_pipe_for_plane(
-		struct dc_state *context,
-		struct pipe_ctx *pipe_ctx,
-		struct dc_plane_state *plane_state)
-{
-	return (pipe_ctx->plane_state == plane_state);
-}
-
 void dc_enable_stereo(
 	struct dc *dc,
 	struct dc_state *context,
@@ -1507,15 +1491,12 @@ void dc_enable_stereo(
 	struct pipe_ctx *pipe;
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		if (context != NULL) {
+		if (context != NULL)
 			pipe = &context->res_ctx.pipe_ctx[i];
-		} else {
-			context = dc->current_state;
+		else
 			pipe = &dc->current_state->res_ctx.pipe_ctx[i];
-		}
-
-		for (j = 0; pipe && j < stream_count; j++)  {
-			if (should_update_pipe_for_stream(context, pipe, streams[j]) &&
+		for (j = 0 ; pipe && j < stream_count; j++)  {
+			if (streams[j] && streams[j] == pipe->stream &&
 				dc->hwss.setup_stereo)
 				dc->hwss.setup_stereo(pipe, dc);
 		}
@@ -2648,7 +2629,6 @@ static void commit_planes_for_stream(struct dc *dc,
 {
 	int i, j;
 	struct pipe_ctx *top_pipe_to_program = NULL;
-	bool should_lock_all_pipes = (update_type != UPDATE_TYPE_FAST);
 
 #if defined(CONFIG_DRM_AMD_DC_DCN)
 	dc_z10_restore(dc);
@@ -2720,7 +2700,7 @@ static void commit_planes_for_stream(struct dc *dc,
 						top_pipe_to_program->stream_res.tg);
 		}
 
-	if (should_lock_all_pipes && dc->hwss.interdependent_update_lock)
+	if ((update_type != UPDATE_TYPE_FAST) && dc->hwss.interdependent_update_lock)
 		dc->hwss.interdependent_update_lock(dc, context, true);
 	else
 		/* Lock the top pipe while updating plane addrs, since freesync requires
@@ -2743,7 +2723,7 @@ static void commit_planes_for_stream(struct dc *dc,
 		if (dc->hwss.program_front_end_for_ctx)
 			dc->hwss.program_front_end_for_ctx(dc, context);
 
-		if (should_lock_all_pipes && dc->hwss.interdependent_update_lock)
+		if ((update_type != UPDATE_TYPE_FAST) && dc->hwss.interdependent_update_lock)
 			dc->hwss.interdependent_update_lock(dc, context, false);
 		else
 			dc->hwss.pipe_control_lock(dc, top_pipe_to_program, false);
@@ -2759,14 +2739,14 @@ static void commit_planes_for_stream(struct dc *dc,
 				struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
 				if (!pipe_ctx->plane_state)
 					continue;
-				if (should_update_pipe_for_plane(context, pipe_ctx, plane_state))
+				if (pipe_ctx->plane_state != plane_state)
 					continue;
-				pipe_ctx->plane_state->triplebuffer_flips = false;
+				plane_state->triplebuffer_flips = false;
 				if (update_type == UPDATE_TYPE_FAST &&
 					dc->hwss.program_triplebuffer != NULL &&
-					!pipe_ctx->plane_state->flip_immediate && dc->debug.enable_tri_buf) {
+					!plane_state->flip_immediate && dc->debug.enable_tri_buf) {
 						/*triple buffer for VUpdate  only*/
-						pipe_ctx->plane_state->triplebuffer_flips = true;
+						plane_state->triplebuffer_flips = true;
 				}
 			}
 			if (update_type == UPDATE_TYPE_FULL) {
@@ -2782,7 +2762,8 @@ static void commit_planes_for_stream(struct dc *dc,
 
 		if (!pipe_ctx->top_pipe &&
 			!pipe_ctx->prev_odm_pipe &&
-			should_update_pipe_for_stream(context, pipe_ctx, stream)) {
+			pipe_ctx->stream &&
+			pipe_ctx->stream == stream) {
 			struct dc_stream_status *stream_status = NULL;
 
 			if (!pipe_ctx->plane_state)
@@ -2835,15 +2816,15 @@ static void commit_planes_for_stream(struct dc *dc,
 				for (j = 0; j < dc->res_pool->pipe_count; j++) {
 					struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
 
-					if (!should_update_pipe_for_stream(context, pipe_ctx, stream))
+					if (pipe_ctx->stream != stream)
 						continue;
 
-					if (!should_update_pipe_for_plane(context, pipe_ctx, plane_state))
+					if (pipe_ctx->plane_state != plane_state)
 						continue;
 
 					// GSL has to be used for flip immediate
 					dc->hwss.set_flip_control_gsl(pipe_ctx,
-							pipe_ctx->plane_state->flip_immediate);
+							plane_state->flip_immediate);
 				}
 			}
 
@@ -2854,26 +2835,25 @@ static void commit_planes_for_stream(struct dc *dc,
 			for (j = 0; j < dc->res_pool->pipe_count; j++) {
 				struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
 
-				if (!should_update_pipe_for_stream(context, pipe_ctx, stream))
+				if (pipe_ctx->stream != stream)
 					continue;
 
-				if (!should_update_pipe_for_plane(context, pipe_ctx, plane_state))
+				if (pipe_ctx->plane_state != plane_state)
 					continue;
-
 				/*program triple buffer after lock based on flip type*/
 				if (dc->hwss.program_triplebuffer != NULL && dc->debug.enable_tri_buf) {
 					/*only enable triplebuffer for  fast_update*/
 					dc->hwss.program_triplebuffer(
-						dc, pipe_ctx, pipe_ctx->plane_state->triplebuffer_flips);
+						dc, pipe_ctx, plane_state->triplebuffer_flips);
 				}
-				if (pipe_ctx->plane_state->update_flags.bits.addr_update)
+				if (srf_updates[i].flip_addr)
 					dc->hwss.update_plane_addr(dc, pipe_ctx);
 			}
 		}
 
 	}
 
-	if (should_lock_all_pipes && dc->hwss.interdependent_update_lock)
+	if ((update_type != UPDATE_TYPE_FAST) && dc->hwss.interdependent_update_lock)
 		dc->hwss.interdependent_update_lock(dc, context, false);
 	else
 		dc->hwss.pipe_control_lock(dc, top_pipe_to_program, false);
@@ -2917,7 +2897,7 @@ static void commit_planes_for_stream(struct dc *dc,
 			continue;
 
 		if (pipe_ctx->bottom_pipe || pipe_ctx->next_odm_pipe ||
-				!pipe_ctx->stream || !should_update_pipe_for_stream(context, pipe_ctx, stream) ||
+				!pipe_ctx->stream || pipe_ctx->stream != stream ||
 				!pipe_ctx->plane_state->update_flags.bits.addr_update ||
 				pipe_ctx->plane_state->skip_manual_trigger)
 			continue;

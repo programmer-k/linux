@@ -251,7 +251,6 @@ int pm_init(struct packet_manager *pm, struct device_queue_manager *dqm)
 	case CHIP_DIMGREY_CAVEFISH:
 	case CHIP_BEIGE_GOBY:
 	case CHIP_YELLOW_CARP:
-	case CHIP_CYAN_SKILLFISH:
 		pm->pmf = &kfd_v9_pm_funcs;
 		break;
 	case CHIP_ALDEBARAN:
@@ -279,7 +278,6 @@ void pm_uninit(struct packet_manager *pm, bool hanging)
 {
 	mutex_destroy(&pm->lock);
 	kernel_queue_uninit(pm->priv_queue, hanging);
-	pm->priv_queue = NULL;
 }
 
 int pm_send_set_resources(struct packet_manager *pm,
@@ -448,9 +446,6 @@ int pm_debugfs_hang_hws(struct packet_manager *pm)
 {
 	uint32_t *buffer, size;
 	int r = 0;
-
-	if (!pm->priv_queue)
-		return -EAGAIN;
 
 	size = pm->pmf->query_status_size;
 	mutex_lock(&pm->lock);

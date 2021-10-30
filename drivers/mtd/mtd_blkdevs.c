@@ -23,6 +23,7 @@
 #include "mtdcore.h"
 
 static LIST_HEAD(blktrans_majors);
+static DEFINE_MUTEX(blktrans_ref_mutex);
 
 static void blktrans_dev_release(struct kref *kref)
 {
@@ -36,9 +37,26 @@ static void blktrans_dev_release(struct kref *kref)
 	kfree(dev);
 }
 
+static struct mtd_blktrans_dev *blktrans_dev_get(struct gendisk *disk)
+{
+	struct mtd_blktrans_dev *dev;
+
+	mutex_lock(&blktrans_ref_mutex);
+	dev = disk->private_data;
+
+	if (!dev)
+		goto unlock;
+	kref_get(&dev->ref);
+unlock:
+	mutex_unlock(&blktrans_ref_mutex);
+	return dev;
+}
+
 static void blktrans_dev_put(struct mtd_blktrans_dev *dev)
 {
+	mutex_lock(&blktrans_ref_mutex);
 	kref_put(&dev->ref, blktrans_dev_release);
+	mutex_unlock(&blktrans_ref_mutex);
 }
 
 
@@ -183,16 +201,19 @@ static blk_status_t mtd_queue_rq(struct blk_mq_hw_ctx *hctx,
 
 static int blktrans_open(struct block_device *bdev, fmode_t mode)
 {
-	struct mtd_blktrans_dev *dev = bdev->bd_disk->private_data;
+	struct mtd_blktrans_dev *dev = blktrans_dev_get(bdev->bd_disk);
 	int ret = 0;
 
-	kref_get(&dev->ref);
+	if (!dev)
+		return -ERESTARTSYS; /* FIXME: busy loop! -arnd*/
 
+	mutex_lock(&mtd_table_mutex);
 	mutex_lock(&dev->lock);
 
 	if (dev->open)
 		goto unlock;
 
+	kref_get(&dev->ref);
 	__module_get(dev->tr->owner);
 
 	if (!dev->mtd)
@@ -212,6 +233,8 @@ static int blktrans_open(struct block_device *bdev, fmode_t mode)
 unlock:
 	dev->open++;
 	mutex_unlock(&dev->lock);
+	mutex_unlock(&mtd_table_mutex);
+	blktrans_dev_put(dev);
 	return ret;
 
 error_release:
@@ -219,20 +242,27 @@ error_release:
 		dev->tr->release(dev);
 error_put:
 	module_put(dev->tr->owner);
+	kref_put(&dev->ref, blktrans_dev_release);
 	mutex_unlock(&dev->lock);
+	mutex_unlock(&mtd_table_mutex);
 	blktrans_dev_put(dev);
 	return ret;
 }
 
 static void blktrans_release(struct gendisk *disk, fmode_t mode)
 {
-	struct mtd_blktrans_dev *dev = disk->private_data;
+	struct mtd_blktrans_dev *dev = blktrans_dev_get(disk);
 
+	if (!dev)
+		return;
+
+	mutex_lock(&mtd_table_mutex);
 	mutex_lock(&dev->lock);
 
 	if (--dev->open)
 		goto unlock;
 
+	kref_put(&dev->ref, blktrans_dev_release);
 	module_put(dev->tr->owner);
 
 	if (dev->mtd) {
@@ -242,13 +272,17 @@ static void blktrans_release(struct gendisk *disk, fmode_t mode)
 	}
 unlock:
 	mutex_unlock(&dev->lock);
+	mutex_unlock(&mtd_table_mutex);
 	blktrans_dev_put(dev);
 }
 
 static int blktrans_getgeo(struct block_device *bdev, struct hd_geometry *geo)
 {
-	struct mtd_blktrans_dev *dev = bdev->bd_disk->private_data;
+	struct mtd_blktrans_dev *dev = blktrans_dev_get(bdev->bd_disk);
 	int ret = -ENXIO;
+
+	if (!dev)
+		return ret;
 
 	mutex_lock(&dev->lock);
 
@@ -258,6 +292,7 @@ static int blktrans_getgeo(struct block_device *bdev, struct hd_geometry *geo)
 	ret = dev->tr->getgeo ? dev->tr->getgeo(dev, geo) : -ENOTTY;
 unlock:
 	mutex_unlock(&dev->lock);
+	blktrans_dev_put(dev);
 	return ret;
 }
 
@@ -280,8 +315,12 @@ int add_mtd_blktrans_dev(struct mtd_blktrans_dev *new)
 	struct gendisk *gd;
 	int ret;
 
-	lockdep_assert_held(&mtd_table_mutex);
+	if (mutex_trylock(&mtd_table_mutex)) {
+		mutex_unlock(&mtd_table_mutex);
+		BUG();
+	}
 
+	mutex_lock(&blktrans_ref_mutex);
 	list_for_each_entry(d, &tr->devs, list) {
 		if (new->devnum == -1) {
 			/* Use first free number */
@@ -293,6 +332,7 @@ int add_mtd_blktrans_dev(struct mtd_blktrans_dev *new)
 			}
 		} else if (d->devnum == new->devnum) {
 			/* Required number taken */
+			mutex_unlock(&blktrans_ref_mutex);
 			return -EBUSY;
 		} else if (d->devnum > new->devnum) {
 			/* Required number was free */
@@ -310,11 +350,14 @@ int add_mtd_blktrans_dev(struct mtd_blktrans_dev *new)
 	 * minor numbers and that the disk naming code below can cope
 	 * with this number. */
 	if (new->devnum > (MINORMASK >> tr->part_bits) ||
-	    (tr->part_bits && new->devnum >= 27 * 26))
+	    (tr->part_bits && new->devnum >= 27 * 26)) {
+		mutex_unlock(&blktrans_ref_mutex);
 		return ret;
+	}
 
 	list_add_tail(&new->list, &tr->devs);
  added:
+	mutex_unlock(&blktrans_ref_mutex);
 
 	mutex_init(&new->lock);
 	kref_init(&new->ref);
@@ -406,7 +449,10 @@ int del_mtd_blktrans_dev(struct mtd_blktrans_dev *old)
 {
 	unsigned long flags;
 
-	lockdep_assert_held(&mtd_table_mutex);
+	if (mutex_trylock(&mtd_table_mutex)) {
+		mutex_unlock(&mtd_table_mutex);
+		BUG();
+	}
 
 	if (old->disk_attributes)
 		sysfs_remove_group(&disk_to_dev(old->disk)->kobj,

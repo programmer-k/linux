@@ -34,6 +34,7 @@ properties:
 
   clocks:
     minItems: 3
+    maxItems: 5
     items:
       - description: MAC host clock
       - description: MAC apb clock

@@ -30,7 +30,7 @@ xfs_health_unmount(
 	unsigned int		checked = 0;
 	bool			warn = false;
 
-	if (xfs_is_shutdown(mp))
+	if (XFS_FORCED_SHUTDOWN(mp))
 		return;
 
 	/* Measure AG corruption levels. */

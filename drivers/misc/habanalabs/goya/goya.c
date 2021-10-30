@@ -350,8 +350,6 @@ static u32 goya_all_events[] = {
 	GOYA_ASYNC_EVENT_ID_FIX_THERMAL_ENV_E
 };
 
-static s64 goya_state_dump_specs_props[SP_MAX] = {0};
-
 static int goya_mmu_clear_pgt_range(struct hl_device *hdev);
 static int goya_mmu_set_dram_default_page(struct hl_device *hdev);
 static int goya_mmu_add_mappings_for_device_cpu(struct hl_device *hdev);
@@ -389,7 +387,6 @@ int goya_set_fixed_properties(struct hl_device *hdev)
 		prop->hw_queues_props[i].cb_alloc_flags = CB_ALLOC_USER;
 	}
 
-	prop->device_dma_offset_for_host_access = HOST_PHYS_BASE;
 	prop->completion_queues_count = NUMBER_OF_CMPLT_QUEUES;
 
 	prop->dram_base_address = DRAM_PHYS_BASE;
@@ -468,8 +465,6 @@ int goya_set_fixed_properties(struct hl_device *hdev)
 	prop->fw_cpu_boot_dev_sts1_valid = false;
 	prop->hard_reset_done_by_fw = false;
 	prop->gic_interrupts_enable = true;
-
-	prop->server_type = HL_SERVER_TYPE_UNKNOWN;
 
 	return 0;
 }
@@ -654,14 +649,14 @@ pci_init:
 					GOYA_BOOT_FIT_REQ_TIMEOUT_USEC);
 	if (rc) {
 		if (hdev->reset_on_preboot_fail)
-			hdev->asic_funcs->hw_fini(hdev, true, false);
+			hdev->asic_funcs->hw_fini(hdev, true);
 		goto pci_fini;
 	}
 
 	if (goya_get_hw_state(hdev) == HL_DEVICE_HW_STATE_DIRTY) {
 		dev_info(hdev->dev,
 			"H/W state is dirty, must reset before initializing\n");
-		hdev->asic_funcs->hw_fini(hdev, true, false);
+		hdev->asic_funcs->hw_fini(hdev, true);
 	}
 
 	if (!hdev->pldm) {
@@ -960,9 +955,8 @@ static int goya_sw_init(struct hl_device *hdev)
 	hdev->supports_coresight = true;
 	hdev->supports_soft_reset = true;
 	hdev->allow_external_soft_reset = true;
-	hdev->supports_wait_for_multi_cs = false;
 
-	hdev->asic_funcs->set_pci_memory_regions(hdev);
+	goya_set_pci_memory_regions(hdev);
 
 	return 0;
 
@@ -2380,7 +2374,7 @@ static void goya_disable_timestamp(struct hl_device *hdev)
 	WREG32(mmPSOC_TIMESTAMP_BASE - CFG_BASE, 0);
 }
 
-static void goya_halt_engines(struct hl_device *hdev, bool hard_reset, bool fw_reset)
+static void goya_halt_engines(struct hl_device *hdev, bool hard_reset)
 {
 	u32 wait_timeout_ms;
 
@@ -2499,7 +2493,6 @@ static void goya_init_firmware_loader(struct hl_device *hdev)
 	struct fw_load_mgr *fw_loader = &hdev->fw_loader;
 
 	/* fill common fields */
-	fw_loader->linux_loaded = false;
 	fw_loader->boot_fit_img.image_name = GOYA_BOOT_FIT_FILE;
 	fw_loader->linux_img.image_name = GOYA_LINUX_FW_FILE;
 	fw_loader->cpu_timeout = GOYA_CPU_TIMEOUT_USEC;
@@ -2703,7 +2696,14 @@ disable_queues:
 	return rc;
 }
 
-static void goya_hw_fini(struct hl_device *hdev, bool hard_reset, bool fw_reset)
+/*
+ * goya_hw_fini - Goya hardware tear-down code
+ *
+ * @hdev: pointer to hl_device structure
+ * @hard_reset: should we do hard reset to all engines or just reset the
+ *              compute/dma engines
+ */
+static void goya_hw_fini(struct hl_device *hdev, bool hard_reset)
 {
 	struct goya_device *goya = hdev->asic_specific;
 	u32 reset_timeout_ms, cpu_timeout_ms, status;
@@ -2796,7 +2796,7 @@ int goya_resume(struct hl_device *hdev)
 	return goya_init_iatu(hdev);
 }
 
-static int goya_mmap(struct hl_device *hdev, struct vm_area_struct *vma,
+static int goya_cb_mmap(struct hl_device *hdev, struct vm_area_struct *vma,
 			void *cpu_addr, dma_addr_t dma_addr, size_t size)
 {
 	int rc;
@@ -4797,12 +4797,6 @@ void goya_handle_eqe(struct hl_device *hdev, struct hl_eq_entry *eq_entry)
 				>> EQ_CTL_EVENT_TYPE_SHIFT);
 	struct goya_device *goya = hdev->asic_specific;
 
-	if (event_type >= GOYA_ASYNC_EVENT_ID_SIZE) {
-		dev_err(hdev->dev, "Event type %u exceeds maximum of %u",
-				event_type, GOYA_ASYNC_EVENT_ID_SIZE - 1);
-		return;
-	}
-
 	goya->events_stat[event_type]++;
 	goya->events_stat_aggregate[event_type]++;
 
@@ -5481,14 +5475,14 @@ u64 goya_get_device_time(struct hl_device *hdev)
 	return device_time | RREG32(mmPSOC_TIMESTAMP_CNTCVL);
 }
 
-static int goya_collective_wait_init_cs(struct hl_cs *cs)
+static void goya_collective_wait_init_cs(struct hl_cs *cs)
 {
-	return 0;
+
 }
 
 static int goya_collective_wait_create_jobs(struct hl_device *hdev,
 		struct hl_ctx *ctx, struct hl_cs *cs, u32 wait_queue_id,
-		u32 collective_engine_id, u32 encaps_signal_offset)
+		u32 collective_engine_id)
 {
 	return -EINVAL;
 }
@@ -5530,62 +5524,6 @@ static int goya_map_pll_idx_to_fw_idx(u32 pll_idx)
 	}
 }
 
-static int goya_gen_sync_to_engine_map(struct hl_device *hdev,
-				struct hl_sync_to_engine_map *map)
-{
-	/* Not implemented */
-	return 0;
-}
-
-static int goya_monitor_valid(struct hl_mon_state_dump *mon)
-{
-	/* Not implemented */
-	return 0;
-}
-
-static int goya_print_single_monitor(char **buf, size_t *size, size_t *offset,
-				struct hl_device *hdev,
-				struct hl_mon_state_dump *mon)
-{
-	/* Not implemented */
-	return 0;
-}
-
-
-static int goya_print_fences_single_engine(
-	struct hl_device *hdev, u64 base_offset, u64 status_base_offset,
-	enum hl_sync_engine_type engine_type, u32 engine_id, char **buf,
-	size_t *size, size_t *offset)
-{
-	/* Not implemented */
-	return 0;
-}
-
-
-static struct hl_state_dump_specs_funcs goya_state_dump_funcs = {
-	.monitor_valid = goya_monitor_valid,
-	.print_single_monitor = goya_print_single_monitor,
-	.gen_sync_to_engine_map = goya_gen_sync_to_engine_map,
-	.print_fences_single_engine = goya_print_fences_single_engine,
-};
-
-static void goya_state_dump_init(struct hl_device *hdev)
-{
-	/* Not implemented */
-	hdev->state_dump_specs.props = goya_state_dump_specs_props;
-	hdev->state_dump_specs.funcs = goya_state_dump_funcs;
-}
-
-static u32 goya_get_sob_addr(struct hl_device *hdev, u32 sob_id)
-{
-	return 0;
-}
-
-static u32 *goya_get_stream_master_qid_arr(void)
-{
-	return NULL;
-}
-
 static const struct hl_asic_funcs goya_funcs = {
 	.early_init = goya_early_init,
 	.early_fini = goya_early_fini,
@@ -5598,7 +5536,7 @@ static const struct hl_asic_funcs goya_funcs = {
 	.halt_engines = goya_halt_engines,
 	.suspend = goya_suspend,
 	.resume = goya_resume,
-	.mmap = goya_mmap,
+	.cb_mmap = goya_cb_mmap,
 	.ring_doorbell = goya_ring_doorbell,
 	.pqe_write = goya_pqe_write,
 	.asic_dma_alloc_coherent = goya_dma_alloc_coherent,
@@ -5671,11 +5609,7 @@ static const struct hl_asic_funcs goya_funcs = {
 	.enable_events_from_fw = goya_enable_events_from_fw,
 	.map_pll_idx_to_fw_idx = goya_map_pll_idx_to_fw_idx,
 	.init_firmware_loader = goya_init_firmware_loader,
-	.init_cpu_scrambler_dram = goya_cpu_init_scrambler_dram,
-	.state_dump_init = goya_state_dump_init,
-	.get_sob_addr = &goya_get_sob_addr,
-	.set_pci_memory_regions = goya_set_pci_memory_regions,
-	.get_stream_master_qid_arr = goya_get_stream_master_qid_arr,
+	.init_cpu_scrambler_dram = goya_cpu_init_scrambler_dram
 };
 
 /*

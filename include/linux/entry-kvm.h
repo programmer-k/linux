@@ -2,11 +2,7 @@
 #ifndef __LINUX_ENTRYKVM_H
 #define __LINUX_ENTRYKVM_H
 
-#include <linux/static_call_types.h>
-#include <linux/tracehook.h>
-#include <linux/syscalls.h>
-#include <linux/seccomp.h>
-#include <linux/sched.h>
+#include <linux/entry-common.h>
 #include <linux/tick.h>
 
 /* Transfer to guest mode work */

@@ -116,7 +116,6 @@ int main(void)
 	OFFSET(__LC_RESTART_FN, lowcore, restart_fn);
 	OFFSET(__LC_RESTART_DATA, lowcore, restart_data);
 	OFFSET(__LC_RESTART_SOURCE, lowcore, restart_source);
-	OFFSET(__LC_RESTART_FLAGS, lowcore, restart_flags);
 	OFFSET(__LC_KERNEL_ASCE, lowcore, kernel_asce);
 	OFFSET(__LC_USER_ASCE, lowcore, user_asce);
 	OFFSET(__LC_LPP, lowcore, lpp);
@@ -153,12 +152,5 @@ int main(void)
 	DEFINE(__KEXEC_SHA_REGION_SIZE, sizeof(struct kexec_sha_region));
 	/* sizeof kernel parameter area */
 	DEFINE(__PARMAREA_SIZE, sizeof(struct parmarea));
-	/* kernel parameter area offsets */
-	DEFINE(IPL_DEVICE, PARMAREA + offsetof(struct parmarea, ipl_device));
-	DEFINE(INITRD_START, PARMAREA + offsetof(struct parmarea, initrd_start));
-	DEFINE(INITRD_SIZE, PARMAREA + offsetof(struct parmarea, initrd_size));
-	DEFINE(OLDMEM_BASE, PARMAREA + offsetof(struct parmarea, oldmem_base));
-	DEFINE(OLDMEM_SIZE, PARMAREA + offsetof(struct parmarea, oldmem_size));
-	DEFINE(COMMAND_LINE, PARMAREA + offsetof(struct parmarea, command_line));
 	return 0;
 }

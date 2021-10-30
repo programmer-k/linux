@@ -111,8 +111,11 @@ struct vc4_hdmi_audio {
 	struct snd_soc_dai_link_component cpu;
 	struct snd_soc_dai_link_component codec;
 	struct snd_soc_dai_link_component platform;
+	int samplerate;
+	int channels;
 	struct snd_dmaengine_dai_dma_data dma_data;
-	struct hdmi_audio_infoframe infoframe;
+	struct snd_pcm_substream *substream;
+
 	bool streaming;
 };
 

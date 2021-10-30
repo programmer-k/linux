@@ -1,12 +1,10 @@
 .. include:: ../disclaimer-zh_CN.rst
 
 :Original: Documentation/core-api/local_ops.rst
-
-:翻译:
-
- 司延腾 Yanteng Si <siyanteng@loongson.cn>
+:Translator: Yanteng Si <siyanteng@loongson.cn>
 
 .. _cn_local_ops:
+
 
 ========================
 本地原子操作的语义和行为

@@ -228,7 +228,7 @@ void *xlate_dev_mem_ptr(phys_addr_t addr)
 	void *bounce = (void *) addr;
 	unsigned long size;
 
-	cpus_read_lock();
+	get_online_cpus();
 	preempt_disable();
 	if (is_swapped(addr)) {
 		size = PAGE_SIZE - (addr & ~PAGE_MASK);
@@ -237,7 +237,7 @@ void *xlate_dev_mem_ptr(phys_addr_t addr)
 			memcpy_absolute(bounce, (void *) addr, size);
 	}
 	preempt_enable();
-	cpus_read_unlock();
+	put_online_cpus();
 	return bounce;
 }
 

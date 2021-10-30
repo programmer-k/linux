@@ -13,7 +13,6 @@
 #include <asm/sigcontext.h>
 
 #include "../../kselftest.h"
-#include "rdvl.h"
 
 int main(int argc, char **argv)
 {
@@ -38,10 +37,6 @@ int main(int argc, char **argv)
 					   strerror(errno), errno);
 
 		vl &= PR_SVE_VL_LEN_MASK;
-
-		if (rdvl_sve() != vl)
-			ksft_exit_fail_msg("PR_SVE_SET_VL reports %d, RDVL %d\n",
-					   vl, rdvl_sve());
 
 		if (!sve_vl_valid(vl))
 			ksft_exit_fail_msg("VL %d invalid\n", vl);

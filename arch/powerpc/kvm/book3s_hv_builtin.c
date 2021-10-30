@@ -137,23 +137,23 @@ long int kvmppc_rm_h_confer(struct kvm_vcpu *vcpu, int target,
  * exist in the system. We use a counter of VMs to track this.
  *
  * One of the operations we need to block is onlining of secondaries, so we
- * protect hv_vm_count with cpus_read_lock/unlock().
+ * protect hv_vm_count with get/put_online_cpus().
  */
 static atomic_t hv_vm_count;
 
 void kvm_hv_vm_activated(void)
 {
-	cpus_read_lock();
+	get_online_cpus();
 	atomic_inc(&hv_vm_count);
-	cpus_read_unlock();
+	put_online_cpus();
 }
 EXPORT_SYMBOL_GPL(kvm_hv_vm_activated);
 
 void kvm_hv_vm_deactivated(void)
 {
-	cpus_read_lock();
+	get_online_cpus();
 	atomic_dec(&hv_vm_count);
-	cpus_read_unlock();
+	put_online_cpus();
 }
 EXPORT_SYMBOL_GPL(kvm_hv_vm_deactivated);
 

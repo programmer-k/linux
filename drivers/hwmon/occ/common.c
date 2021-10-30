@@ -340,11 +340,18 @@ static ssize_t occ_show_temp_10(struct device *dev,
 		if (val == OCC_TEMP_SENSOR_FAULT)
 			return -EREMOTEIO;
 
-		/* sensor not ready */
-		if (val == 0)
-			return -EAGAIN;
+		/*
+		 * VRM doesn't return temperature, only alarm bit. This
+		 * attribute maps to tempX_alarm instead of tempX_input for
+		 * VRM
+		 */
+		if (temp->fru_type != OCC_FRU_TYPE_VRM) {
+			/* sensor not ready */
+			if (val == 0)
+				return -EAGAIN;
 
-		val *= 1000;
+			val *= 1000;
+		}
 		break;
 	case 2:
 		val = temp->fru_type;
@@ -879,7 +886,7 @@ static int occ_setup_sensor_attrs(struct occ *occ)
 					     0, i);
 		attr++;
 
-		if (sensors->temp.version == 2 &&
+		if (sensors->temp.version > 1 &&
 		    temp->fru_type == OCC_FRU_TYPE_VRM) {
 			snprintf(attr->name, sizeof(attr->name),
 				 "temp%d_alarm", s);

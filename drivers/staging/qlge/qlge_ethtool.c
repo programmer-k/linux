@@ -621,10 +621,7 @@ static void qlge_get_regs(struct net_device *ndev,
 		regs->len = sizeof(struct qlge_reg_dump);
 }
 
-static int qlge_get_coalesce(struct net_device *ndev,
-			     struct ethtool_coalesce *c,
-			     struct kernel_ethtool_coalesce *kernel_coal,
-			     struct netlink_ext_ack *extack)
+static int qlge_get_coalesce(struct net_device *ndev, struct ethtool_coalesce *c)
 {
 	struct qlge_adapter *qdev = netdev_to_qdev(ndev);
 
@@ -647,10 +644,7 @@ static int qlge_get_coalesce(struct net_device *ndev,
 	return 0;
 }
 
-static int qlge_set_coalesce(struct net_device *ndev,
-			     struct ethtool_coalesce *c,
-			     struct kernel_ethtool_coalesce *kernel_coal,
-			     struct netlink_ext_ack *extack)
+static int qlge_set_coalesce(struct net_device *ndev, struct ethtool_coalesce *c)
 {
 	struct qlge_adapter *qdev = netdev_to_qdev(ndev);
 

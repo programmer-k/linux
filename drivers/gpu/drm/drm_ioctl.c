@@ -426,7 +426,7 @@ done:
 }
 
 /**
- * drm_noop - DRM no-op ioctl implementation
+ * drm_noop - DRM no-op ioctl implemntation
  * @dev: DRM device for the ioctl
  * @data: data pointer for the ioctl
  * @file_priv: DRM file for the ioctl call
@@ -446,7 +446,7 @@ int drm_noop(struct drm_device *dev, void *data,
 EXPORT_SYMBOL(drm_noop);
 
 /**
- * drm_invalid_op - DRM invalid ioctl implementation
+ * drm_invalid_op - DRM invalid ioctl implemntation
  * @dev: DRM device for the ioctl
  * @data: data pointer for the ioctl
  * @file_priv: DRM file for the ioctl call

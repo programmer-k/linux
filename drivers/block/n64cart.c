@@ -129,8 +129,8 @@ static int __init n64cart_probe(struct platform_device *pdev)
 	}
 
 	reg_base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(reg_base))
-		return PTR_ERR(reg_base);
+	if (!reg_base)
+		return -EINVAL;
 
 	disk = blk_alloc_disk(NUMA_NO_NODE);
 	if (!disk)

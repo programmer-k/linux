@@ -951,7 +951,8 @@ xfs_growfs_rt(
 		return -EINVAL;
 
 	/* Unsupported realtime features. */
-	if (xfs_has_rmapbt(mp) || xfs_has_reflink(mp))
+	if (xfs_sb_version_hasrmapbt(&mp->m_sb) ||
+	    xfs_sb_version_hasreflink(&mp->m_sb))
 		return -EOPNOTSUPP;
 
 	nrblocks = in->newblocks;
@@ -1130,9 +1131,6 @@ error_cancel:
 		error = xfs_trans_commit(tp);
 		if (error)
 			break;
-
-		/* Ensure the mount RT feature flag is now set. */
-		mp->m_features |= XFS_FEAT_REALTIME;
 	}
 	if (error)
 		goto out_free;

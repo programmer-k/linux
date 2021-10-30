@@ -42,9 +42,7 @@ static int ice_info_pba(struct ice_pf *pf, struct ice_info_ctx *ctx)
 
 	status = ice_read_pba_string(hw, (u8 *)ctx->buf, sizeof(ctx->buf));
 	if (status)
-		/* We failed to locate the PBA, so just skip this entry */
-		dev_dbg(ice_pf_to_dev(pf), "Failed to read Product Board Assembly string, status %s\n",
-			ice_stat_str(status));
+		return -EIO;
 
 	return 0;
 }
@@ -477,7 +475,7 @@ struct ice_pf *ice_allocate_pf(struct device *dev)
 {
 	struct devlink *devlink;
 
-	devlink = devlink_alloc(&ice_devlink_ops, sizeof(struct ice_pf), dev);
+	devlink = devlink_alloc(&ice_devlink_ops, sizeof(struct ice_pf));
 	if (!devlink)
 		return NULL;
 
@@ -504,7 +502,7 @@ int ice_devlink_register(struct ice_pf *pf)
 	struct device *dev = ice_pf_to_dev(pf);
 	int err;
 
-	err = devlink_register(devlink);
+	err = devlink_register(devlink, dev);
 	if (err) {
 		dev_err(dev, "devlink registration failed: %d\n", err);
 		return err;

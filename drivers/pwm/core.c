@@ -304,7 +304,7 @@ EXPORT_SYMBOL_GPL(pwmchip_add);
  *
  * Returns: 0 on success or a negative error code on failure.
  */
-void pwmchip_remove(struct pwm_chip *chip)
+int pwmchip_remove(struct pwm_chip *chip)
 {
 	pwmchip_sysfs_unexport(chip);
 
@@ -318,6 +318,8 @@ void pwmchip_remove(struct pwm_chip *chip)
 	free_pwms(chip);
 
 	mutex_unlock(&pwm_lock);
+
+	return 0;
 }
 EXPORT_SYMBOL_GPL(pwmchip_remove);
 

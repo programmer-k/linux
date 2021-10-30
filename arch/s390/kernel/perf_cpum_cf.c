@@ -158,14 +158,6 @@ static size_t cfdiag_getctrset(struct cf_ctrset_entry *ctrdata, int ctrset,
 	return need;
 }
 
-static const u64 cpumf_ctr_ctl[CPUMF_CTR_SET_MAX] = {
-	[CPUMF_CTR_SET_BASIC]	= 0x02,
-	[CPUMF_CTR_SET_USER]	= 0x04,
-	[CPUMF_CTR_SET_CRYPTO]	= 0x08,
-	[CPUMF_CTR_SET_EXT]	= 0x01,
-	[CPUMF_CTR_SET_MT_DIAG] = 0x20,
-};
-
 /* Read out all counter sets and save them in the provided data buffer.
  * The last 64 byte host an artificial trailer entry.
  */
@@ -1146,7 +1138,7 @@ static long cfset_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int ret;
 
-	cpus_read_lock();
+	get_online_cpus();
 	mutex_lock(&cfset_ctrset_mutex);
 	switch (cmd) {
 	case S390_HWCTR_START:
@@ -1163,7 +1155,7 @@ static long cfset_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		break;
 	}
 	mutex_unlock(&cfset_ctrset_mutex);
-	cpus_read_unlock();
+	put_online_cpus();
 	return ret;
 }
 

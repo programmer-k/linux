@@ -106,6 +106,10 @@ def extract_tap_lines(kernel_output: Iterable[str]) -> LineStream:
 				yield line_num, line[prefix_len:]
 	return LineStream(lines=isolate_kunit_output(kernel_output))
 
+def raw_output(kernel_output) -> None:
+	for line in kernel_output:
+		print(line.rstrip())
+
 DIVIDER = '=' * 60
 
 RESET = '\033[0;0m'
@@ -133,7 +137,7 @@ def print_log(log) -> None:
 	for m in log:
 		print_with_timestamp(m)
 
-TAP_ENTRIES = re.compile(r'^(TAP|[\s]*ok|[\s]*not ok|[\s]*[0-9]+\.\.[0-9]+|[\s]*# (Subtest:|.*: kunit test case crashed!)).*$')
+TAP_ENTRIES = re.compile(r'^(TAP|[\s]*ok|[\s]*not ok|[\s]*[0-9]+\.\.[0-9]+|[\s]*#).*$')
 
 def consume_non_diagnostic(lines: LineStream) -> None:
 	while lines and not TAP_ENTRIES.match(lines.peek()):
