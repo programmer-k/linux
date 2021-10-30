@@ -229,8 +229,8 @@ static int read_object_code(u64 addr, size_t len, u8 cpumode,
 			    struct thread *thread, struct state *state)
 {
 	struct addr_location al;
-	unsigned char buf1[BUFSZ];
-	unsigned char buf2[BUFSZ];
+	unsigned char buf1[BUFSZ] = {0};
+	unsigned char buf2[BUFSZ] = {0};
 	size_t ret_len;
 	u64 objdump_addr;
 	const char *objdump_name;
@@ -658,7 +658,7 @@ static int do_test_code_reading(bool try_kcore)
 				/*
 				 * Both cpus and threads are now owned by evlist
 				 * and will be freed by following perf_evlist__set_maps
-				 * call. Getting refference to keep them alive.
+				 * call. Getting reference to keep them alive.
 				 */
 				perf_cpu_map__get(cpus);
 				perf_thread_map__get(threads);
@@ -706,13 +706,9 @@ static int do_test_code_reading(bool try_kcore)
 out_put:
 	thread__put(thread);
 out_err:
-
-	if (evlist) {
-		evlist__delete(evlist);
-	} else {
-		perf_cpu_map__put(cpus);
-		perf_thread_map__put(threads);
-	}
+	evlist__delete(evlist);
+	perf_cpu_map__put(cpus);
+	perf_thread_map__put(threads);
 	machine__delete_threads(machine);
 	machine__delete(machine);
 
