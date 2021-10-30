@@ -135,7 +135,7 @@ stash_usr_regs(struct rt_sigframe __user *sf, struct pt_regs *regs,
 
 	err |= __copy_to_user(&sf->uc.uc_sigmask, set, sizeof(sigset_t));
 
-	return err;
+	return err ? -EFAULT : 0;
 }
 
 static int restore_usr_regs(struct pt_regs *regs, struct rt_sigframe __user *sf)
@@ -153,7 +153,7 @@ static int restore_usr_regs(struct pt_regs *regs, struct rt_sigframe __user *sf)
 		err |= restore_arcv2_regs(&(sf->uc.uc_mcontext), regs);
 
 	if (err)
-		return err;
+		return -EFAULT;
 
 	set_current_blocked(&set);
 	regs->bta	= uregs.scratch.bta;
@@ -302,7 +302,7 @@ setup_rt_frame(struct ksignal *ksig, sigset_t *set, struct pt_regs *regs)
 		regs->r2 = (unsigned long)&sf->uc;
 
 		/*
-		 * small optim to avoid unconditonally calling do_sigaltstack
+		 * small optim to avoid unconditionally calling do_sigaltstack
 		 * in sigreturn path, now that we only have rt_sigreturn
 		 */
 		magic = MAGIC_SIGALTSTK;
@@ -434,7 +434,7 @@ void do_signal(struct pt_regs *regs)
 void do_notify_resume(struct pt_regs *regs)
 {
 	/*
-	 * ASM glue gaurantees that this is only called when returning to
+	 * ASM glue guarantees that this is only called when returning to
 	 * user mode
 	 */
 	if (test_thread_flag(TIF_NOTIFY_RESUME))

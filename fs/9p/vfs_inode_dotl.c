@@ -37,7 +37,10 @@ v9fs_vfs_mknod_dotl(struct user_namespace *mnt_userns, struct inode *dir,
 		    struct dentry *dentry, umode_t omode, dev_t rdev);
 
 /**
- * v9fs_get_fsgid_for_create - Helper function to get the gid for creating a
+ * v9fs_get_fsgid_for_create - Helper function to get the gid for a new object
+ * @dir_inode: The directory inode
+ *
+ * Helper function to get the gid for creating a
  * new file system object. This checks the S_ISGID to determine the owning
  * group of the new file system object.
  */
@@ -59,7 +62,7 @@ static int v9fs_test_inode_dotl(struct inode *inode, void *data)
 	struct p9_stat_dotl *st = (struct p9_stat_dotl *)data;
 
 	/* don't match inode of different type */
-	if ((inode->i_mode & S_IFMT) != (st->st_mode & S_IFMT))
+	if (inode_wrong_type(inode, st->st_mode))
 		return 0;
 
 	if (inode->i_generation != st->st_gen)
@@ -211,12 +214,13 @@ int v9fs_open_to_dotl_flags(int flags)
 
 /**
  * v9fs_vfs_create_dotl - VFS hook to create files for 9P2000.L protocol.
+ * @mnt_userns: The user namespace of the mount
  * @dir: directory inode that is being created
  * @dentry:  dentry that is being deleted
  * @omode: create permissions
+ * @excl: True if the file must not yet exist
  *
  */
-
 static int
 v9fs_vfs_create_dotl(struct user_namespace *mnt_userns, struct inode *dir,
 		     struct dentry *dentry, umode_t omode, bool excl)
@@ -361,6 +365,7 @@ err_clunk_old_fid:
 
 /**
  * v9fs_vfs_mkdir_dotl - VFS mkdir hook to create a directory
+ * @mnt_userns: The user namespace of the mount
  * @dir:  inode that is being unlinked
  * @dentry: dentry that is being unlinked
  * @omode: mode for new directory
@@ -537,6 +542,7 @@ static int v9fs_mapped_iattr_valid(int iattr_valid)
 
 /**
  * v9fs_vfs_setattr_dotl - set file metadata
+ * @mnt_userns: The user namespace of the mount
  * @dentry: file whose metadata to set
  * @iattr: metadata assignment structure
  *
@@ -663,14 +669,10 @@ v9fs_stat2inode_dotl(struct p9_stat_dotl *stat, struct inode *inode,
 		if (stat->st_result_mask & P9_STATS_NLINK)
 			set_nlink(inode, stat->st_nlink);
 		if (stat->st_result_mask & P9_STATS_MODE) {
-			inode->i_mode = stat->st_mode;
-			if ((S_ISBLK(inode->i_mode)) ||
-						(S_ISCHR(inode->i_mode)))
-				init_special_inode(inode, inode->i_mode,
-								inode->i_rdev);
+			mode = stat->st_mode & S_IALLUGO;
+			mode |= inode->i_mode & ~S_IALLUGO;
+			inode->i_mode = mode;
 		}
-		if (stat->st_result_mask & P9_STATS_RDEV)
-			inode->i_rdev = new_decode_dev(stat->st_rdev);
 		if (!(flags & V9FS_STAT2INODE_KEEP_ISIZE) &&
 		    stat->st_result_mask & P9_STATS_SIZE)
 			v9fs_i_size_write(inode, stat->st_size);
@@ -820,6 +822,7 @@ v9fs_vfs_link_dotl(struct dentry *old_dentry, struct inode *dir,
 
 /**
  * v9fs_vfs_mknod_dotl - create a special file
+ * @mnt_userns: The user namespace of the mount
  * @dir: inode destination for new link
  * @dentry: dentry for file
  * @omode: mode for creation
@@ -959,7 +962,7 @@ int v9fs_refresh_inode_dotl(struct p9_fid *fid, struct inode *inode)
 	/*
 	 * Don't update inode if the file type is different
 	 */
-	if ((inode->i_mode & S_IFMT) != (st->st_mode & S_IFMT))
+	if (inode_wrong_type(inode, st->st_mode))
 		goto out;
 
 	/*

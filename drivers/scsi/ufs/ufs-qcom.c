@@ -253,11 +253,16 @@ static int ufs_qcom_host_reset(struct ufs_hba *hba)
 {
 	int ret = 0;
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	bool reenable_intr = false;
 
 	if (!host->core_reset) {
 		dev_warn(hba->dev, "%s: reset control not set\n", __func__);
 		goto out;
 	}
+
+	reenable_intr = hba->is_irq_enabled;
+	disable_irq(hba->irq);
+	hba->is_irq_enabled = false;
 
 	ret = reset_control_assert(host->core_reset);
 	if (ret) {
@@ -279,6 +284,11 @@ static int ufs_qcom_host_reset(struct ufs_hba *hba)
 				 __func__, ret);
 
 	usleep_range(1000, 1100);
+
+	if (reenable_intr) {
+		enable_irq(hba->irq);
+		hba->is_irq_enabled = true;
+	}
 
 out:
 	return ret;
@@ -809,9 +819,9 @@ static u32 ufs_qcom_get_ufs_hci_version(struct ufs_hba *hba)
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
 	if (host->hw_ver.major == 0x1)
-		return UFSHCI_VERSION_11;
+		return ufshci_version(1, 1);
 	else
-		return UFSHCI_VERSION_20;
+		return ufshci_version(2, 0);
 }
 
 /**
@@ -1061,13 +1071,8 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 		if (res) {
 			host->dev_ref_clk_ctrl_mmio =
 					devm_ioremap_resource(dev, res);
-			if (IS_ERR(host->dev_ref_clk_ctrl_mmio)) {
-				dev_warn(dev,
-					"%s: could not map dev_ref_clk_ctrl_mmio, err %ld\n",
-					__func__,
-					PTR_ERR(host->dev_ref_clk_ctrl_mmio));
+			if (IS_ERR(host->dev_ref_clk_ctrl_mmio))
 				host->dev_ref_clk_ctrl_mmio = NULL;
-			}
 			host->dev_ref_clk_en_mask = BIT(5);
 		}
 	}
@@ -1541,11 +1546,10 @@ MODULE_DEVICE_TABLE(acpi, ufs_qcom_acpi_match);
 #endif
 
 static const struct dev_pm_ops ufs_qcom_pm_ops = {
-	.suspend	= ufshcd_pltfrm_suspend,
-	.resume		= ufshcd_pltfrm_resume,
-	.runtime_suspend = ufshcd_pltfrm_runtime_suspend,
-	.runtime_resume  = ufshcd_pltfrm_runtime_resume,
-	.runtime_idle    = ufshcd_pltfrm_runtime_idle,
+	SET_SYSTEM_SLEEP_PM_OPS(ufshcd_system_suspend, ufshcd_system_resume)
+	SET_RUNTIME_PM_OPS(ufshcd_runtime_suspend, ufshcd_runtime_resume, NULL)
+	.prepare	 = ufshcd_suspend_prepare,
+	.complete	 = ufshcd_resume_complete,
 };
 
 static struct platform_driver ufs_qcom_pltform = {

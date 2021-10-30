@@ -501,6 +501,18 @@ fail_over_mac
 	This option was added in bonding version 3.2.0.  The "follow"
 	policy was added in bonding version 3.3.0.
 
+lacp_active
+	Option specifying whether to send LACPDU frames periodically.
+
+	off or 0
+		LACPDU frames acts as "speak when spoken to".
+
+	on or 1
+		LACPDU frames are sent along the configured links
+		periodically. See lacp_rate for more details.
+
+	The default is on.
+
 lacp_rate
 
 	Option specifying the rate in which we'll ask our link partner
@@ -1988,7 +2000,7 @@ netif_carrier.
 If use_carrier is 0, then the MII monitor will first query the
 device's (via ioctl) MII registers and check the link state.  If that
 request fails (not just that it returns carrier down), then the MII
-monitor will make an ethtool ETHOOL_GLINK request to attempt to obtain
+monitor will make an ethtool ETHTOOL_GLINK request to attempt to obtain
 the same information.  If both methods fail (i.e., the driver either
 does not support or had some error in processing both the MII register
 and ethtool requests), then the MII monitor will assume the link is
